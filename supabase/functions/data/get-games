@@ -1,0 +1,118 @@
+import { serve } from "https://deno.land/std@0.224.0/http/server.ts";
+
+const NCAA_API_BASE = "https://ncaa-api.henrygd.me";
+
+type TeamApi = {
+  names?: { short?: string };
+  rank?: number | string | null;
+  score?: number | string | null;
+  winner?: boolean;
+  conferences?: Array<{ conferenceSeo?: string | null }>;
+};
+
+type GameApi = {
+  gameID?: string | number;
+  startTimeEpoch?: number | string;
+  contestClock?: string;
+  currentPeriod?: string | number;
+  gameState?: string;
+  finalMessage?: string;
+  home?: TeamApi;
+  away?: TeamApi;
+};
+
+type ScoreboardResponse = {
+  games?: Array<{ game?: GameApi } | GameApi>;
+};
+
+function json(status: number, body: unknown): Response {
+  return new Response(JSON.stringify(body), {
+    status,
+    headers: {
+      "content-type": "application/json; charset=utf-8",
+    },
+  });
+}
+
+function unwrapGame(wrapper: { game?: GameApi } | GameApi): GameApi {
+  if ((wrapper as { game?: GameApi }).game) {
+    return (wrapper as { game?: GameApi }).game as GameApi;
+  }
+  return wrapper as GameApi;
+}
+
+function normalizeGame(game: GameApi) {
+  return {
+    gameID: game.gameID ?? null,
+    startTimeEpoch: game.startTimeEpoch ?? null,
+    gameState: game.gameState ?? null,
+    finalMessage: game.finalMessage ?? null,
+    contestClock: game.contestClock ?? null,
+    currentPeriod: game.currentPeriod ?? null,
+    home: {
+      name: game.home?.names?.short ?? null,
+      rank: game.home?.rank ?? null,
+      score: game.home?.score ?? null,
+      winner: game.home?.winner === true,
+      conferenceSeo: game.home?.conferences?.[0]?.conferenceSeo ?? null,
+    },
+    away: {
+      name: game.away?.names?.short ?? null,
+      rank: game.away?.rank ?? null,
+      score: game.away?.score ?? null,
+      winner: game.away?.winner === true,
+      conferenceSeo: game.away?.conferences?.[0]?.conferenceSeo ?? null,
+    },
+  };
+}
+
+function isValidDatePath(date: string): boolean {
+  return /^\d{4}\/\d{2}\/\d{2}$/.test(date);
+}
+
+async function fetchDayGames(isoDate: string): Promise<ScoreboardResponse | null> {
+  const url = `${NCAA_API_BASE}/scoreboard/basketball-men/d1/${isoDate}/all-conf`;
+  const res = await fetch(url, {
+    headers: {
+      "accept": "application/json",
+    },
+  });
+
+  if (!res.ok) {
+    return null;
+  }
+
+  try {
+    return (await res.json()) as ScoreboardResponse;
+  } catch {
+    return null;
+  }
+}
+
+serve(async (req) => {
+
+  const date = new Date();
+
+  // Local Hawaiian time! (UTC-10)
+  const localTimestamp = date.getTime() - 600 * 60 * 1000;
+  const localDate = new Date(localTimestamp);
+  const localDateISO = localDate.toISOString().slice(0, 10).split('-').join('/');
+
+  console.log(localDateISO);
+
+  const data = await fetchDayGames(localDateISO);
+  if (!data || !Array.isArray(data.games)) {
+    return json(502, {
+      error: "Failed to fetch games from upstream NCAA API.",
+      date: localDateISO,
+    });
+  }
+
+  const games = data.games.map(unwrapGame).map(normalizeGame);
+
+  return json(200, {
+    date,
+    totalGames: games.length,
+    games,
+  });
+});
