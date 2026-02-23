@@ -1,0 +1,170 @@
+import { serve } from "https://deno.land/std@0.224.0/http/server.ts";
+
+type TierKey = "highMajor" | "highMid" | "trueMid" | "lowMajor";
+
+type TeamLike = {
+  winner?: boolean;
+  rank?: number | string | null;
+  conferences?: Array<{ conferenceSeo?: string | null }>;
+};
+
+type GameLike = {
+  home?: TeamLike;
+  away?: TeamLike;
+};
+
+const CONFERENCE_TIER_MAP: Record<string, TierKey> = {
+  "acc": "highMajor",
+  "big-12": "highMajor",
+  "big-ten": "highMajor",
+  "sec": "highMajor",
+  "big-east": "highMajor",
+  "mountain-west": "highMid",
+  "atlantic-10": "highMid",
+  "wcc": "highMid",
+  "american": "highMid",
+  "mvc": "trueMid",
+  "cusa": "trueMid",
+  "ivy-league": "trueMid",
+  "big-west": "trueMid",
+  "socon": "trueMid",
+  "caa": "trueMid",
+  "sun-belt": "trueMid",
+  "mac": "trueMid",
+  "wac": "lowMajor",
+  "big-south": "lowMajor",
+  "big-sky": "lowMajor",
+  "southland": "lowMajor",
+  "horizon": "lowMajor",
+  "summit-league": "lowMajor",
+  "maac": "lowMajor",
+  "asun": "lowMajor",
+  "ovc": "lowMajor",
+  "patriot": "lowMajor",
+  "america-east": "lowMajor",
+  "swac": "lowMajor",
+  "meac": "lowMajor",
+  "nec": "lowMajor",
+};
+
+const CONF_POINTS: Record<TierKey, { home: number; road: number }> = {
+  highMajor: { home: 3.5, road: 5 },
+  highMid: { home: 2.5, road: 4 },
+  trueMid: { home: 1.5, road: 2.5 },
+  lowMajor: { home: 1, road: 1.5 },
+};
+
+function getConferenceTier(seo?: string | null): number | null {
+  if (!seo) return null;
+  const tier = CONFERENCE_TIER_MAP[seo.toLowerCase()];
+  switch (tier) {
+    case "highMajor":
+      return 3;
+    case "highMid":
+      return 2;
+    case "trueMid":
+      return 1;
+    case "lowMajor":
+      return 0;
+    default:
+      return null;
+  }
+}
+
+function normalizeRank(rank: number | string | null | undefined): number | null {
+  if (rank === "" || rank === null || typeof rank === "undefined") return null;
+  const parsed = Number(rank);
+  return Number.isFinite(parsed) ? parsed : null;
+}
+
+export function calculateGamePoints(game: GameLike, winnerIsHome: boolean): number {
+  const homeConference = game.home?.conferences?.[0]?.conferenceSeo?.toLowerCase() ?? null;
+  const awayConference = game.away?.conferences?.[0]?.conferenceSeo?.toLowerCase() ?? null;
+  const loserRank = winnerIsHome ? normalizeRank(game.away?.rank) : normalizeRank(game.home?.rank);
+
+  let gamePoints = 0;
+
+  if (homeConference && awayConference && homeConference === awayConference) {
+    const tierKey = CONFERENCE_TIER_MAP[homeConference];
+    if (tierKey) {
+      gamePoints = CONF_POINTS[tierKey][winnerIsHome ? "home" : "road"];
+    }
+  } else {
+    const winnerConference = winnerIsHome ? homeConference : awayConference;
+    const loserConference = winnerIsHome ? awayConference : homeConference;
+    const winnerTier = getConferenceTier(winnerConference);
+    const loserTier = getConferenceTier(loserConference);
+    const normalizedWinnerTier = winnerTier ?? -1;
+    const normalizedLoserTier = loserTier ?? -1;
+    const confDiff = normalizedLoserTier - normalizedWinnerTier;
+
+    if (confDiff + 1 > 0) {
+      gamePoints = (confDiff + 1) * 2;
+    }
+
+    if (normalizedWinnerTier === -1) {
+      gamePoints -= 4;
+    }
+  }
+
+  if (loserRank !== null && loserRank <= 25) {
+    gamePoints += loserRank <= 10 ? 5 : 2.5;
+  }
+
+  return gamePoints;
+}
+
+function json(status: number, body: unknown): Response {
+  return new Response(JSON.stringify(body), {
+    status,
+    headers: {
+      "content-type": "application/json; charset=utf-8",
+    },
+  });
+}
+
+serve(async (req) => {
+  if (req.method !== "POST") {
+    return json(405, { error: "Method not allowed. Use POST." });
+  }
+
+  try {
+    const payload = await req.json();
+
+    // Single game mode
+    if (payload?.game) {
+      const winnerIsHome =
+        typeof payload.winnerIsHome === "boolean"
+          ? payload.winnerIsHome
+          : payload.game?.home?.winner === true;
+
+      return json(200, {
+        points: calculateGamePoints(payload.game, winnerIsHome),
+        winnerIsHome,
+      });
+    }
+
+    // Batch mode
+    if (Array.isArray(payload?.games)) {
+      const results = payload.games.map((game: GameLike, index: number) => {
+        const winnerIsHome = game?.home?.winner === true;
+        return {
+          index,
+          winnerIsHome,
+          points: calculateGamePoints(game, winnerIsHome),
+        };
+      });
+
+      return json(200, { results });
+    }
+
+    return json(400, {
+      error: "Invalid payload. Provide either { game, winnerIsHome? } or { games: [...] }.",
+    });
+  } catch (error) {
+    return json(400, {
+      error: "Failed to parse request body.",
+      details: error instanceof Error ? error.message : String(error),
+    });
+  }
+});
