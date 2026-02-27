@@ -1,50 +1,53 @@
 import { serve } from "https://deno.land/std@0.224.0/http/server.ts";
+import {
+  fetchDayGames,
+  getDefaultSeasonStartDatePath,
+  getHawaiiDatePath,
+  isValidDatePath,
+  nextDatePath,
+  type NormalizedGame,
+} from "../data/get-games";
 
 type TierKey = "highMajor" | "highMid" | "trueMid" | "lowMajor";
 
-type TeamLike = {
-  winner?: boolean;
-  rank?: number | string | null;
-  conferences?: Array<{ conferenceSeo?: string | null }>;
-};
-
-type GameLike = {
-  home?: TeamLike;
-  away?: TeamLike;
+type ScoringRequest = {
+  range?: "today" | "season";
+  startDate?: string;
+  endDate?: string;
 };
 
 const CONFERENCE_TIER_MAP: Record<string, TierKey> = {
-  "acc": "highMajor",
+  acc: "highMajor",
   "big-12": "highMajor",
   "big-ten": "highMajor",
-  "sec": "highMajor",
+  sec: "highMajor",
   "big-east": "highMajor",
   "mountain-west": "highMid",
   "atlantic-10": "highMid",
-  "wcc": "highMid",
-  "american": "highMid",
-  "mvc": "trueMid",
-  "cusa": "trueMid",
+  wcc: "highMid",
+  american: "highMid",
+  mvc: "trueMid",
+  cusa: "trueMid",
   "ivy-league": "trueMid",
   "big-west": "trueMid",
-  "socon": "trueMid",
-  "caa": "trueMid",
+  socon: "trueMid",
+  caa: "trueMid",
   "sun-belt": "trueMid",
-  "mac": "trueMid",
-  "wac": "lowMajor",
+  mac: "trueMid",
+  wac: "lowMajor",
   "big-south": "lowMajor",
   "big-sky": "lowMajor",
-  "southland": "lowMajor",
-  "horizon": "lowMajor",
+  southland: "lowMajor",
+  horizon: "lowMajor",
   "summit-league": "lowMajor",
-  "maac": "lowMajor",
-  "asun": "lowMajor",
-  "ovc": "lowMajor",
-  "patriot": "lowMajor",
+  maac: "lowMajor",
+  asun: "lowMajor",
+  ovc: "lowMajor",
+  patriot: "lowMajor",
   "america-east": "lowMajor",
-  "swac": "lowMajor",
-  "meac": "lowMajor",
-  "nec": "lowMajor",
+  swac: "lowMajor",
+  meac: "lowMajor",
+  nec: "lowMajor",
 };
 
 const CONF_POINTS: Record<TierKey, { home: number; road: number }> = {
@@ -77,9 +80,9 @@ function normalizeRank(rank: number | string | null | undefined): number | null 
   return Number.isFinite(parsed) ? parsed : null;
 }
 
-export function calculateGamePoints(game: GameLike, winnerIsHome: boolean): number {
-  const homeConference = game.home?.conferences?.[0]?.conferenceSeo?.toLowerCase() ?? null;
-  const awayConference = game.away?.conferences?.[0]?.conferenceSeo?.toLowerCase() ?? null;
+function calculateGamePoints(game: NormalizedGame, winnerIsHome: boolean): number {
+  const homeConference = game.home?.conferenceSeo?.toLowerCase() ?? null;
+  const awayConference = game.away?.conferenceSeo?.toLowerCase() ?? null;
   const loserRank = winnerIsHome ? normalizeRank(game.away?.rank) : normalizeRank(game.home?.rank);
 
   let gamePoints = 0;
@@ -123,47 +126,95 @@ function json(status: number, body: unknown): Response {
   });
 }
 
+function resolveDateRange(payload: ScoringRequest): { startDate: string; endDate: string } {
+  const today = getHawaiiDatePath();
+  const range = payload.range ?? "today";
+
+  if (range === "today") {
+    return { startDate: today, endDate: today };
+  }
+
+  const startDate = payload.startDate ?? getDefaultSeasonStartDatePath();
+  const endDate = payload.endDate ?? today;
+
+  if (!isValidDatePath(startDate) || !isValidDatePath(endDate)) {
+    throw new Error("startDate and endDate must use YYYY/MM/DD.");
+  }
+
+  if (startDate > endDate) {
+    throw new Error("startDate must be less than or equal to endDate.");
+  }
+
+  return { startDate, endDate };
+}
+
+async function fetchGamesForRange(startDate: string, endDate: string): Promise<Array<{ date: string; games: NormalizedGame[] }>> {
+  const days: Array<{ date: string; games: NormalizedGame[] }> = [];
+  for (let date = startDate; date <= endDate; date = nextDatePath(date)) {
+    const games = await fetchDayGames(date);
+    days.push({ date, games });
+  }
+  return days;
+}
+
 serve(async (req) => {
   if (req.method !== "POST") {
     return json(405, { error: "Method not allowed. Use POST." });
   }
 
   try {
-    const payload = await req.json();
+    const payload = (await req.json()) as ScoringRequest;
+    const { startDate, endDate } = resolveDateRange(payload ?? {});
+    const dailyGames = await fetchGamesForRange(startDate, endDate);
 
-    // Single game mode
-    if (payload?.game) {
-      const winnerIsHome =
-        typeof payload.winnerIsHome === "boolean"
-          ? payload.winnerIsHome
-          : payload.game?.home?.winner === true;
+    const dailyResults = dailyGames.map(({ date, games }) => {
+      const scoredGames = games
+        .map((game) => {
+          const winnerIsHome = game.home.winner === true;
+          const winnerIsAway = game.away.winner === true;
 
-      return json(200, {
-        points: calculateGamePoints(payload.game, winnerIsHome),
-        winnerIsHome,
-      });
-    }
+          if (!winnerIsHome && !winnerIsAway) {
+            return {
+              gameID: game.gameID,
+              status: game.gameState,
+              points: null,
+              winnerIsHome: null,
+            };
+          }
 
-    // Batch mode
-    if (Array.isArray(payload?.games)) {
-      const results = payload.games.map((game: GameLike, index: number) => {
-        const winnerIsHome = game?.home?.winner === true;
-        return {
-          index,
-          winnerIsHome,
-          points: calculateGamePoints(game, winnerIsHome),
-        };
-      });
+          return {
+            gameID: game.gameID,
+            status: game.gameState,
+            points: calculateGamePoints(game, winnerIsHome),
+            winnerIsHome,
+          };
+        });
 
-      return json(200, { results });
-    }
+      const dayPoints = scoredGames.reduce((sum, game) => sum + (game.points ?? 0), 0);
 
-    return json(400, {
-      error: "Invalid payload. Provide either { game, winnerIsHome? } or { games: [...] }.",
+      return {
+        date,
+        totalGames: games.length,
+        totalPoints: dayPoints,
+        games: scoredGames,
+      };
+    });
+
+    const totalPoints = dailyResults.reduce((sum, day) => sum + day.totalPoints, 0);
+    const totalGames = dailyResults.reduce((sum, day) => sum + day.totalGames, 0);
+
+    return json(200, {
+      range: startDate === endDate ? "today" : "season",
+      startDate,
+      endDate,
+      totalDays: dailyResults.length,
+      totalGames,
+      totalPoints,
+      days: dailyResults,
     });
   } catch (error) {
     return json(400, {
-      error: "Failed to parse request body.",
+      error: "Failed to process scoring request.",
       details: error instanceof Error ? error.message : String(error),
     });
   }
