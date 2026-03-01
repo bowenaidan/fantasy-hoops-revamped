@@ -1,24 +1,35 @@
-//TODO: parse jonrothstein twitter rss feed to find 'epitome of brutality'
 import Parser from 'rss-parser';
 
 const parser = new Parser();
 
-(async () => {
-  try {
-    const feed = await parser.parseURL('https://rss.app/feeds/dQisPFzPzNx46CFd.xml');
-    console.log(`Feed Title: ${feed.title}`);
+/**
+ * Parse the RSS feed at the given URL.
+ * @param url URL of the RSS feed
+ */
+export async function parseRss(url: string) {
+  const feed = await parser.parseURL(url);
+  const returnArray: string[][] = [];
 
-    const returnArray: string[][][] = [];
+  feed.items.forEach((item: any) => {
+    returnArray.push([item.title, item.link, item.pubDate]);
+  });
 
-    // Iterate over the items in the feed
-    feed.items.forEach((item: any) => {
-      returnArray.push([item.title, item.link, item.pubDate]);
-      console.log(`Item Title: ${item.title}`);
-      console.log(`Item Link: ${item.link}`);
-      console.log(`Item Upload Date: ${item.pubDate}`);
-    });
+  return { title: feed.title, items: returnArray };
+}
 
-  } catch (error) {
-    console.error('Error fetching or parsing the RSS feed:', error);
-  }
-})();
+if (require.main === module) {
+  (async () => {
+    try {
+      const url = process.argv[2] || 'https://rss.app/feeds/dQisPFzPzNx46CFd.xml';
+      const result = await parseRss(url);
+      console.log(`Feed Title: ${result.title}`);
+      result.items.forEach(([title, link, pubDate]) => {
+        console.log(`Item Title: ${title}`);
+        console.log(`Item Link: ${link}`);
+        console.log(`Item Upload Date: ${pubDate}`);
+      });
+    } catch (error) {
+      console.error('Error fetching or parsing the RSS feed:', error);
+    }
+  })();
+}
