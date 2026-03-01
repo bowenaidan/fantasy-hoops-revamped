@@ -1,8 +1,6 @@
-import { serve } from "https://deno.land/std@0.224.0/http/server.ts";
-
 const NCAA_API_BASE = "https://ncaa-api.henrygd.me";
 
-type TeamApi = {
+export type TeamApi = {
   names?: { short?: string };
   rank?: number | string | null;
   score?: number | string | null;
@@ -10,7 +8,7 @@ type TeamApi = {
   conferences?: Array<{ conferenceSeo?: string | null }>;
 };
 
-type GameApi = {
+export type GameApi = {
   gameID?: string | number;
   startTimeEpoch?: number | string;
   contestClock?: string;
@@ -25,14 +23,28 @@ type ScoreboardResponse = {
   games?: Array<{ game?: GameApi } | GameApi>;
 };
 
-function json(status: number, body: unknown): Response {
-  return new Response(JSON.stringify(body), {
-    status,
-    headers: {
-      "content-type": "application/json; charset=utf-8",
-    },
-  });
-}
+export type NormalizedGame = {
+  gameID: string | number | null;
+  startTimeEpoch: number | string | null;
+  gameState: string | null;
+  finalMessage: string | null;
+  contestClock: string | null;
+  currentPeriod: string | number | null;
+  home: {
+    name: string | null;
+    rank: number | string | null;
+    score: number | string | null;
+    winner: boolean;
+    conferenceSeo: string | null;
+  };
+  away: {
+    name: string | null;
+    rank: number | string | null;
+    score: number | string | null;
+    winner: boolean;
+    conferenceSeo: string | null;
+  };
+};
 
 function unwrapGame(wrapper: { game?: GameApi } | GameApi): GameApi {
   if ((wrapper as { game?: GameApi }).game) {
@@ -41,7 +53,7 @@ function unwrapGame(wrapper: { game?: GameApi } | GameApi): GameApi {
   return wrapper as GameApi;
 }
 
-function normalizeGame(game: GameApi) {
+function normalizeGame(game: GameApi): NormalizedGame {
   return {
     gameID: game.gameID ?? null,
     startTimeEpoch: game.startTimeEpoch ?? null,
@@ -66,53 +78,50 @@ function normalizeGame(game: GameApi) {
   };
 }
 
-function isValidDatePath(date: string): boolean {
+function toDatePath(date: Date): string {
+  return date.toISOString().slice(0, 10).replace(/-/g, "/");
+}
+
+export function getHawaiiDatePath(now = new Date()): string {
+  const hawaiiOffsetMinutes = 600;
+  const localTimestamp = now.getTime() - hawaiiOffsetMinutes * 60 * 1000;
+  return toDatePath(new Date(localTimestamp));
+}
+
+export function getDefaultSeasonStartDatePath(now = new Date()): string {
+  const year = now.getUTCMonth() >= 10 ? now.getUTCFullYear() : now.getUTCFullYear() - 1;
+  return `${year}/11/01`;
+}
+
+export function isValidDatePath(date: string): boolean {
   return /^\d{4}\/\d{2}\/\d{2}$/.test(date);
 }
 
-async function fetchDayGames(isoDate: string): Promise<ScoreboardResponse | null> {
-  const url = `${NCAA_API_BASE}/scoreboard/basketball-men/d1/${isoDate}/all-conf`;
-  const res = await fetch(url, {
-    headers: {
-      "accept": "application/json",
-    },
-  });
-
-  if (!res.ok) {
-    return null;
-  }
-
-  try {
-    return (await res.json()) as ScoreboardResponse;
-  } catch {
-    return null;
-  }
+export function nextDatePath(datePath: string): string {
+  const normalized = datePath.replace(/\//g, "-");
+  const date = new Date(`${normalized}T00:00:00.000Z`);
+  date.setUTCDate(date.getUTCDate() + 1);
+  return toDatePath(date);
 }
 
-serve(async (req) => {
+export async function fetchDayGames(isoDatePath: string): Promise<NormalizedGame[]> {
+  const url = `${NCAA_API_BASE}/scoreboard/basketball-men/d1/${isoDatePath}/all-conf`;
+  const res = await fetch(url, { headers: { accept: "application/json" } });
 
-  const date = new Date();
-
-  // Local Hawaiian time! (UTC-10)
-  const localTimestamp = date.getTime() - 600 * 60 * 1000;
-  const localDate = new Date(localTimestamp);
-  const localDateISO = localDate.toISOString().slice(0, 10).split('-').join('/');
-
-  console.log(localDateISO);
-
-  const data = await fetchDayGames(localDateISO);
-  if (!data || !Array.isArray(data.games)) {
-    return json(502, {
-      error: "Failed to fetch games from upstream NCAA API.",
-      date: localDateISO,
-    });
+  if (!res.ok) {
+    throw new Error(`Upstream request failed (${res.status}) for ${isoDatePath}`);
   }
 
-  const games = data.games.map(unwrapGame).map(normalizeGame);
+  let data: ScoreboardResponse;
+  try {
+    data = (await res.json()) as ScoreboardResponse;
+  } catch {
+    throw new Error(`Invalid JSON response for ${isoDatePath}`);
+  }
 
-  return json(200, {
-    date,
-    totalGames: games.length,
-    games,
-  });
-});
+  if (!Array.isArray(data.games)) {
+    return [];
+  }
+
+  return data.games.map(unwrapGame).map(normalizeGame);
+}

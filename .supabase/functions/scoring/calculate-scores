@@ -6,7 +6,7 @@ import {
   isValidDatePath,
   nextDatePath,
   type NormalizedGame,
-} from "../data/get-games";
+} from "./get-games";
 
 type TierKey = "highMajor" | "highMid" | "trueMid" | "lowMajor";
 
