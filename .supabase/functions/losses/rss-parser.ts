@@ -8,13 +8,14 @@ const parser = new Parser();
     const feed = await parser.parseURL('https://rss.app/feeds/dQisPFzPzNx46CFd.xml');
     console.log(`Feed Title: ${feed.title}`);
 
-    const returnArray: string[][] = [];
+    const returnArray: string[][][] = [];
 
     // Iterate over the items in the feed
     feed.items.forEach((item: any) => {
-      returnArray.push([item.title, item.link]);
+      returnArray.push([item.title, item.link, item.pubDate]);
       console.log(`Item Title: ${item.title}`);
       console.log(`Item Link: ${item.link}`);
+      console.log(`Item Upload Date: ${item.pubDate}`);
     });
 
   } catch (error) {
