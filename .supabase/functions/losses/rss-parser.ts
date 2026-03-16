@@ -1,6 +1,8 @@
 import Parser from 'rss-parser';
 
 const parser = new Parser();
+// TODO: read this in from a config file
+const DEFAULT_URL = 'https://rss.app/feeds/dQisPFzPzNx46CFd.xml';
 
 /**
  * Parse the RSS feed at the given URL.
@@ -20,7 +22,7 @@ export async function parseRss(url: string) {
 if (require.main === module) {
   (async () => {
     try {
-      const url = process.argv[2] || 'https://rss.app/feeds/dQisPFzPzNx46CFd.xml';
+      const url = process.argv[2] || DEFAULT_URL;
       const result = await parseRss(url);
       console.log(`Feed Title: ${result.title}`);
       result.items.forEach(([title, link, pubDate]) => {
