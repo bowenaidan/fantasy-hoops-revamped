@@ -5,11 +5,18 @@
 //   - isGameFinal accepts "FINAL - OT" etc. The original compared currentPeriod to
 //     exactly "final", so overtime wins were never scored.
 //   - Conference tiers are passed in (they live in the conference_tiers table).
+//   - Per-team non-conference tier overrides (teams.nonconference_tier), for the
+//     league's "Gonzaga Rule": Gonzaga counts as a high major in non-conference games
+//     and as its conference's tier (high mid) in conference games.
 
-import type { NormalizedGame } from "./ncaa.ts";
+import { type NormalizedGame, type NormalizedTeam, normalizeSchoolName } from "./ncaa.ts";
 
 export type Tier = "highMajor" | "highMid" | "trueMid" | "lowMajor";
 export type TierMap = ReadonlyMap<string, Tier>;
+/** Normalized team name -> tier to use in that team's non-conference games. */
+export type TeamTierOverrides = ReadonlyMap<string, Tier>;
+
+const NO_OVERRIDES: TeamTierOverrides = new Map();
 
 const TIER_LEVEL: Record<Tier, number> = { highMajor: 3, highMid: 2, trueMid: 1, lowMajor: 0 };
 
@@ -30,11 +37,18 @@ export function tierLevel(conferenceSeo: string | null | undefined, tiers: TierM
   return tier ? TIER_LEVEL[tier] : NON_D1_LEVEL;
 }
 
+/** A team's tier level for a non-conference game, honoring per-team overrides. */
+function nonConferenceLevel(team: NormalizedTeam, tiers: TierMap, overrides: TeamTierOverrides): number {
+  const override = overrides.get(normalizeSchoolName(team.name));
+  return override ? TIER_LEVEL[override] : tierLevel(team.conferenceSeo, tiers);
+}
+
 /** Points the given side earns for winning this game. */
 export function calculateGamePoints(
   game: NormalizedGame,
   winnerIsHome: boolean,
   tiers: TierMap,
+  overrides: TeamTierOverrides = NO_OVERRIDES,
 ): number {
   const homeConf = game.home.conferenceSeo?.toLowerCase() ?? null;
   const awayConf = game.away.conferenceSeo?.toLowerCase() ?? null;
@@ -46,8 +60,8 @@ export function calculateGamePoints(
     const tier = tiers.get(homeConf);
     if (tier) points = CONF_POINTS[tier][winnerIsHome ? "home" : "road"];
   } else {
-    const winnerLevel = tierLevel(winnerIsHome ? homeConf : awayConf, tiers);
-    const loserLevel = tierLevel(winnerIsHome ? awayConf : homeConf, tiers);
+    const winnerLevel = nonConferenceLevel(winnerIsHome ? game.home : game.away, tiers, overrides);
+    const loserLevel = nonConferenceLevel(winnerIsHome ? game.away : game.home, tiers, overrides);
     // Beating a peer is worth 2, each tier "up" adds 2, beating a lower tier is worth 0.
     const diff = loserLevel - winnerLevel;
     if (diff + 1 > 0) points = (diff + 1) * 2;
@@ -99,6 +113,7 @@ export function scoreGame(
   game: NormalizedGame,
   rosterName: (scoreboardName: string | null) => string | undefined,
   tiers: TierMap,
+  overrides: TeamTierOverrides = NO_OVERRIDES,
 ): PointEntry[] {
   if (!game.gameID || !isGameFinal(game)) return [];
 
@@ -113,7 +128,7 @@ export function scoreGame(
     entries.push({
       ncaa_game_id: game.gameID,
       team_name: winnerRoster,
-      points: calculateGamePoints(game, winnerIsHome, tiers),
+      points: calculateGamePoints(game, winnerIsHome, tiers, overrides),
       reason: "win",
     });
   }

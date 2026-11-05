@@ -20,6 +20,7 @@ import {
   calculateGamePoints,
   isGameFinal,
   scoreGame,
+  type TeamTierOverrides,
   type Tier,
   type TierMap,
   unknownConferences,
@@ -68,6 +69,7 @@ function toGameRow(
   homeName: string,
   awayName: string,
   tiers: TierMap,
+  overrides: TeamTierOverrides,
 ) {
   return {
     ncaa_game_id: game.gameID,
@@ -82,13 +84,13 @@ function toGameRow(
     home_rank: game.home.rank,
     home_conference: game.home.conferenceSeo,
     home_winner: game.home.winner,
-    home_potential_points: calculateGamePoints(game, true, tiers),
+    home_potential_points: calculateGamePoints(game, true, tiers, overrides),
     away_team: awayName,
     away_score: game.away.score,
     away_rank: game.away.rank,
     away_conference: game.away.conferenceSeo,
     away_winner: game.away.winner,
-    away_potential_points: calculateGamePoints(game, false, tiers),
+    away_potential_points: calculateGamePoints(game, false, tiers, overrides),
     raw: game.raw,
   };
 }
@@ -118,16 +120,25 @@ Deno.serve(async (req) => {
     const db = serviceClient();
     const ncaaBase = Deno.env.get("NCAA_API_BASE") ?? DEFAULT_NCAA_API_BASE;
 
-    const [{ data: tierRows, error: tierErr }, { data: seasons, error: seasonErr }] = await Promise.all([
+    const [
+      { data: tierRows, error: tierErr },
+      { data: seasons, error: seasonErr },
+      { data: overrideRows, error: overrideErr },
+    ] = await Promise.all([
       db.from("conference_tiers").select("conference_seo, tier"),
       db.from("seasons").select("id, label, start_date, end_date"),
+      db.from("teams").select("name, nonconference_tier").not("nonconference_tier", "is", null),
     ]);
     if (tierErr) throw tierErr;
     if (seasonErr) throw seasonErr;
+    if (overrideErr) throw overrideErr;
     if (!tierRows?.length) {
       throw new HttpError(500, "conference_tiers is empty; every team would be scored as non-D1.");
     }
     const tiers: TierMap = new Map(tierRows.map((r) => [r.conference_seo.toLowerCase(), r.tier as Tier]));
+    const overrides: TeamTierOverrides = new Map(
+      (overrideRows ?? []).map((r) => [normalizeSchoolName(r.name), r.nonconference_tier as Tier]),
+    );
 
     const rosterCache = new Map<number, Map<string, string>>();
     const results: DayResult[] = [];
@@ -166,13 +177,14 @@ Deno.serve(async (req) => {
                 rosterName(g.home.name) ?? g.home.name!,
                 rosterName(g.away.name) ?? g.away.name!,
                 tiers,
+                overrides,
               ),
             ]),
           ).values(),
         ];
         const points = [
           ...new Map(
-            relevant.flatMap((g) => scoreGame(g, rosterName, tiers)).map((
+            relevant.flatMap((g) => scoreGame(g, rosterName, tiers, overrides)).map((
               p,
             ) => [`${p.ncaa_game_id}|${p.team_name}`, p]),
           ).values(),

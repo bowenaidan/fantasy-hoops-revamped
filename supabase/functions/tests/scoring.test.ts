@@ -94,6 +94,21 @@ Deno.test("only rostered teams get ledger entries; ordinary losses earn nothing"
   ]);
 });
 
+Deno.test("Gonzaga Rule: high major in non-conference games, conference tier in conference games", () => {
+  const tiersWithPac = new Map<string, Tier>([...tiers, ["pac-12", "highMid"]]);
+  const overrides = new Map<string, Tier>([["Gonzaga", "highMajor"]]);
+  // Gonzaga beats Kentucky (SEC) at home: peer win (2) instead of up-one-tier (4).
+  const nonConf = g(win("Gonzaga", "pac-12"), loss("Kentucky", "sec"));
+  assertEquals(calculateGamePoints(nonConf, true, tiersWithPac), 4);
+  assertEquals(calculateGamePoints(nonConf, true, tiersWithPac, overrides), 2);
+  // Purdue beating Gonzaga is a peer win (2), not a win down a tier (0).
+  const beatZags = g(win("Purdue", "big-ten"), loss("Gonzaga", "pac-12"));
+  assertEquals(calculateGamePoints(beatZags, true, tiersWithPac, overrides), 2);
+  // Conference game: plain Pac-12 (high mid) road win.
+  const conf = g(loss("Oregon St.", "pac-12"), win("Gonzaga", "pac-12"));
+  assertEquals(calculateGamePoints(conf, false, tiersWithPac, overrides), 4);
+});
+
 Deno.test("isGameFinal: overtime finals count (the Sheets version skipped them)", () => {
   assertEquals(isGameFinal(g(win("A", "sec"), loss("B", "sec"), { currentPeriod: "FINAL - OT" })), true);
   assertEquals(isGameFinal(g(win("A", "sec"), loss("B", "sec"), { currentPeriod: "FINAL - 3OT" })), true);
