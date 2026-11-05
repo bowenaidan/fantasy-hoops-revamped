@@ -1,0 +1,17 @@
+{
+  "nodeModulesDir": "none",
+  "tasks": {
+    "test": "deno test --allow-read tests/",
+    "check": "deno check sync-scores/index.ts sync-rankings/index.ts update-odds/index.ts _shared/rss.ts"
+  },
+  "lint": {
+    "rules": {
+      "exclude": [
+        "no-import-prefix"
+      ]
+    }
+  },
+  "fmt": {
+    "lineWidth": 120
+  }
+}
