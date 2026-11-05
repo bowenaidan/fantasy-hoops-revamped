@@ -1,196 +1,286 @@
 # Deploying on a Proxmox home server
 
-Everything runs on self-hosted Supabase (Postgres, PostgREST, the edge-function
-runtime, pg_cron) in one VM. The Next.js app can run in the same VM or its own
-LXC container.
+Everything runs in one Debian VM: self-hosted Supabase (Postgres, PostgREST, the
+edge-function runtime, pg_cron) in Docker, and the Next.js app under systemd.
 
 ```
 Proxmox
-└─ VM "supabase" (Debian 12, Docker)
-   ├─ supabase/docker compose stack: db, kong :8000, rest, functions, studio, ...
+└─ VM (Debian 12, Docker)
+   ├─ Supabase compose stack: db, kong :8000, rest, functions, studio, ...
    │    pg_cron ──HTTP──▶ kong:8000/functions/v1/sync-scores ──▶ NCAA API
-   └─ (optional) fantasy-hoops Next.js app, or a separate LXC
+   └─ fantasy-hoops Next.js app :3000 (systemd) ──▶ kong:8000/rest/v1 (anon key)
 ```
 
-## 1. VM
+Only port 3000 is ever published outside your network (step 10).
 
-- Use a **VM, not an LXC**, for the Docker stack. Docker in unprivileged LXCs works but
-  breaks on Proxmox upgrades (overlayfs/AppArmor). Proxmox recommends VMs for Docker.
-- Debian 12, 2 vCPU, **4 GB RAM minimum** (the Supabase stack is ~10 containers), 30 GB disk.
-- Give it a DHCP reservation or static IP. These docs use `supabase-vm.lan`.
-- Install Docker Engine + the compose plugin (docs.docker.com/engine/install/debian).
+All commands below run **inside the VM** unless noted. The examples call the VM
+`supabase-vm.lan`; use its IP or hostname.
 
-## 2. Self-hosted Supabase
+## 1. Create the VM
+
+In the Proxmox UI (Create VM):
+
+- **OS**: Debian 12 netinst ISO.
+- **CPU / RAM / disk**: 2 vCPU, 4–8 GB RAM (the Supabase stack is about 10 containers), 40 GB.
+- **Network**: give it a fixed address (a DHCP reservation in your router is easiest).
+- Use a **VM, not an LXC container**. Docker inside LXC works until a Proxmox upgrade
+  breaks it (overlayfs/AppArmor); Proxmox recommends VMs for Docker.
+
+During the Debian install, deselect the desktop environment and select "SSH server".
+
+## 2. Install the basics
+
+```bash
+sudo apt update && sudo apt install -y git rsync curl python3 ca-certificates
+
+# Docker Engine + compose plugin (official repo; see docs.docker.com/engine/install/debian)
+sudo install -m 0755 -d /etc/apt/keyrings
+sudo curl -fsSL https://download.docker.com/linux/debian/gpg -o /etc/apt/keyrings/docker.asc
+echo "deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/docker.asc] https://download.docker.com/linux/debian $(. /etc/os-release && echo "$VERSION_CODENAME") stable" \
+  | sudo tee /etc/apt/sources.list.d/docker.list
+sudo apt update && sudo apt install -y docker-ce docker-ce-cli containerd.io docker-compose-plugin
+sudo usermod -aG docker "$USER"    # then log out and back in
+
+# Node.js 22
+curl -fsSL https://deb.nodesource.com/setup_22.x | sudo -E bash -
+sudo apt install -y nodejs
+```
+
+## 3. Self-hosted Supabase
 
 Follow https://supabase.com/docs/guides/self-hosting/docker. In short:
 
 ```bash
-git clone --depth 1 https://github.com/supabase/supabase /opt/supabase-src
-cp -r /opt/supabase-src/docker /opt/supabase/docker
+git clone --depth 1 https://github.com/supabase/supabase /tmp/supabase-src
+sudo mkdir -p /opt/supabase && sudo cp -r /tmp/supabase-src/docker /opt/supabase/docker
+sudo chown -R "$USER": /opt/supabase
 cd /opt/supabase/docker && cp .env.example .env
 ```
 
-In `.env`, **change every secret**: `POSTGRES_PASSWORD`, `JWT_SECRET`, `ANON_KEY` and
-`SERVICE_ROLE_KEY` (generate both keys from your JWT_SECRET using the tool in the
-self-hosting docs), and `DASHBOARD_USERNAME`/`DASHBOARD_PASSWORD`. Then `docker compose up -d`.
+Edit `/opt/supabase/docker/.env` and **change every secret**:
 
-Add the app's function settings to the `functions` service in `docker-compose.yml`:
+- `POSTGRES_PASSWORD`, `JWT_SECRET`, `DASHBOARD_USERNAME`, `DASHBOARD_PASSWORD`.
+- `ANON_KEY` and `SERVICE_ROLE_KEY`: generate both from your `JWT_SECRET` as described in
+  the self-hosting guide's API keys section. The defaults are public; never keep them.
+- Add `ODDS_API_KEY=...` (your key from the-odds-api.com).
+
+In `docker-compose.yml`, add the app's settings to the `functions` service:
 
 ```yaml
   functions:
     environment:
       # ...existing entries...
       ODDS_API_KEY: ${ODDS_API_KEY}
-      # NCAA_API_BASE: http://ncaa-api:3000   # only if you self-host the NCAA proxy (step 6)
+      # NCAA_API_BASE: http://ncaa-api:3000   # only if you self-host the NCAA proxy (optional, below)
 ```
 
-…and put `ODDS_API_KEY=...` in `.env`. `SUPABASE_URL` and `SUPABASE_SERVICE_ROLE_KEY`
-are already passed to functions by the stock compose file.
-
-## 3. Database schema
-
-Apply the migrations in order (from any machine that can reach Postgres):
+`SUPABASE_URL` and `SUPABASE_SERVICE_ROLE_KEY` are already passed to functions by the
+stock compose file. Start it:
 
 ```bash
-for f in supabase/migrations/*.sql; do
-  psql "postgres://postgres:$POSTGRES_PASSWORD@supabase-vm.lan:5432/postgres" -v ON_ERROR_STOP=1 -f "$f"
-done
+docker compose up -d
+docker compose ps        # everything should become "healthy"
 ```
 
-(The Supabase CLI also works: `supabase db push --db-url postgres://...`.)
+Studio (the dashboard) is at `http://supabase-vm.lan:8000`, using the dashboard login.
 
-Postgres is reachable on 5432 (via Supavisor) from your LAN by default. Don't port-forward it.
-
-## 4. Edge functions
+Two shortcuts the rest of this guide uses (add them to `~/.bashrc` if you like):
 
 ```bash
-SUPABASE_DOCKER_DIR=you@supabase-vm.lan:/opt/supabase/docker ./scripts/deploy-functions.sh
+# psql inside the database container
+alias fhsql='docker exec -i supabase-db psql -U postgres -v ON_ERROR_STOP=1'
+# read a value out of Supabase's .env
+envval() { grep "^$1=" /opt/supabase/docker/.env | cut -d= -f2-; }
 ```
 
-Smoke test (service role key from `.env`):
+Running psql through `docker exec` avoids exposing Postgres or typing its password. (Port
+5432 on the VM goes through Supabase's connection pooler, which expects a special
+username, so plain `psql -h ... -U postgres` doesn't work there anyway.)
+
+## 4. Get the code and create the schema
 
 ```bash
-curl -X POST http://supabase-vm.lan:8000/functions/v1/sync-scores \
-  -H "Authorization: Bearer $SERVICE_ROLE_KEY" -d '{}'
+git clone https://github.com/bowenaidan/fantasy-hoops-revamped ~/fantasy-hoops
+cd ~/fantasy-hoops
+for f in supabase/migrations/*.sql; do echo "$f"; fhsql < "$f"; done
 ```
 
-The sync functions reject anything but the service role key, including the anon key.
-
-## 5. League setup
-
-Load conference tiers, every D1 team, managers and the draft from the league workbook:
+## 5. Deploy the edge functions
 
 ```bash
-scripts/import_league.py "College Hoops Teams League.xlsx" \
+SUPABASE_DOCKER_DIR=/opt/supabase/docker ./scripts/deploy-functions.sh
+```
+
+This copies the functions next to Supabase's own `main` router and restarts the functions
+container. (From another machine, `SUPABASE_DOCKER_DIR=you@supabase-vm.lan:/opt/supabase/docker`
+does the same over SSH.)
+
+The sync functions only accept the service role key, never the anon key.
+
+## 6. Import the league
+
+Copy the workbook to the VM (run this **on your own computer**):
+
+```bash
+scp "College Hoops Teams League.xlsx" you@supabase-vm.lan:~/fantasy-hoops/
+```
+
+Then on the VM:
+
+```bash
+cd ~/fantasy-hoops
+./scripts/import_league.py "College Hoops Teams League.xlsx" \
   --season 2026-27 --start 2026-11-02 --end 2027-04-06 > import.sql
-psql "postgres://postgres:$POSTGRES_PASSWORD@supabase-vm.lan:5432/postgres" -v ON_ERROR_STOP=1 -f import.sql
+fhsql < import.sql
 ```
 
-It reads the `Conference Tiers` and `2026-2027 DRAFT` sheets (full manager names come from
-the standings sheet), matches spreadsheet names to NCAA names, prints what it found, and
-refuses to write SQL if any team can't be matched (add the spelling to `ALIASES` in the
-script). Re-running after draft changes is safe: teams that stay keep their points.
-The Gonzaga Rule is set by a migration (`teams.nonconference_tier`).
+The importer reads the `Conference Tiers` and `2026-2027 DRAFT` sheets (full manager
+names come from the standings sheet), matches spreadsheet names to NCAA names, and prints
+what it found. If any team can't be matched it writes no SQL and exits with an error: add
+the spelling to `ALIASES` in the script. Re-running after draft changes is safe; teams that
+stay keep their points. (The Gonzaga Rule comes from a migration, not the workbook.)
 
-Backfill games already played (max 31 days per call):
+## 7. Backfill games already played
+
+`sync-scores` takes at most 31 days per call, so this loops in chunks up to today:
 
 ```bash
-for range in '2026-11-02 2026-12-02' '2026-12-03 2027-01-02'; do
-  set -- $range
-  curl -s -X POST http://supabase-vm.lan:8000/functions/v1/sync-scores \
-    -H "Authorization: Bearer $SERVICE_ROLE_KEY" \
-    -d "{\"startDate\":\"$1\",\"endDate\":\"$2\"}"
+KEY=$(envval SERVICE_ROLE_KEY)
+start=2026-11-02
+today=$(TZ=America/Chicago date +%F)
+while [[ ! "$start" > "$today" ]]; do
+  end=$(date -d "$start +30 days" +%F)
+  curl -s -X POST http://localhost:8000/functions/v1/sync-scores \
+    -H "Authorization: Bearer $KEY" -d "{\"startDate\":\"$start\",\"endDate\":\"$end\"}"
+  echo
+  start=$(date -d "$end +1 day" +%F)
 done
 ```
 
-Watch the `unknownConferences` field in the response. Any conference listed there is
-being scored as **non-D1** (the -4 rule). If it's actually D1, add it:
-
-```sql
-insert into conference_tiers values ('<conference-seo>', 'lowMajor');  -- or highMajor / highMid / trueMid
-```
-
-…then re-run the sync for the affected dates. Re-running is always safe.
-
-Buy-game losses and manual corrections:
-
-```sql
-insert into point_adjustments (season_id, team_name, points, kind, game_date, note)
-select id, 'Kentucky', -5, 'buy_game_loss', '2026-11-20', 'Lost at home to a 300+ KenPom team'
-from seasons where label = '2026-27';
-```
-
-## 6. Scheduling (pg_cron)
-
-Run in the SQL editor (Studio) or psql as `postgres`. pg_cron times are **UTC**.
-
-```sql
-create extension if not exists pg_cron with schema pg_catalog;
-create extension if not exists pg_net  with schema extensions;
-
--- Store the service role key once; cron jobs read it from the vault.
-select vault.create_secret('<SERVICE_ROLE_KEY>', 'service_role_key');
-
--- Kept out of the public schema so PostgREST never exposes it.
-create schema if not exists private;
-create or replace function private.call_function(fn text, body jsonb default '{}')
-returns bigint language sql as $$
-  select net.http_post(
-    url := 'http://kong:8000/functions/v1/' || fn,
-    headers := jsonb_build_object(
-      'Content-Type', 'application/json',
-      'Authorization', 'Bearer ' || (select decrypted_secret from vault.decrypted_secrets where name = 'service_role_key')
-    ),
-    body := body,
-    timeout_milliseconds := 120000
-  );
-$$;
-revoke execute on function private.call_function(text, jsonb) from public, anon, authenticated;
-
--- Live scores + today's points every 10 minutes
-select cron.schedule('sync-today',     '*/10 * * * *', $$select private.call_function('sync-scores')$$);
--- Re-check yesterday after the 3am Central rollover (catches late finals/corrections)
-select cron.schedule('sync-yesterday', '15 10 * * *',  $$select private.call_function('sync-scores', '{"date":"yesterday"}')$$);
--- AP poll (released Mondays; daily is cheap)
-select cron.schedule('sync-rankings',  '0 18 * * *',   $$select private.call_function('sync-rankings')$$);
-```
-
-`kong` resolves because the database container is on the compose network. Check runs with
-`select * from cron.job_run_details order by start_time desc limit 20;` and responses with
-`select * from net._http_response order by created desc limit 20;`.
-
-Optional: the NCAA API proxy (github.com/henrygd/ncaa-api) ships a Docker image. Running
-it in the same compose project avoids the public instance's 5 req/s limit and outages;
-set `NCAA_API_BASE` as shown in step 2.
-
-## 7. Next.js app
+Check `unknownConferences` in the output. Every conference listed there is scored as
+**non-D1** (the -4 rule). D2/D3 conferences (`mwc`, `sciac`, `nsic`, ...) belong there. If
+a D1 conference shows up, give it a tier and re-run the sync for the affected dates:
 
 ```bash
-cp .env.example .env.local   # SUPABASE_URL=http://localhost:8000 if in the same VM, plus ANON_KEY
-npm ci && npm run build && npm run start   # port 3000
+echo "insert into conference_tiers values ('<conference-seo>', 'lowMajor');" | fhsql
 ```
 
-Run it under systemd (or `docker build` it into the same compose project). It reads
-Supabase on the server only, with the anon key. Never give it the service role key.
-The page reloads its data every minute while open, matching the 10-minute sync closely
-enough without hammering anything.
+Re-running a sync is always safe.
 
-## 8. Exposing it outside your network
+### Buy-game losses and manual corrections
 
-- Don't port-forward Kong (8000), Studio, or Postgres.
-- Use **Cloudflare Tunnel** or **Tailscale Funnel** to publish only the Next.js app (port 3000).
-  The browser never talks to Supabase directly, so nothing else needs to be public.
-- Studio (the dashboard) stays LAN or Tailscale only.
+These are entered by hand. For example, Oklahoma's 2026-27 buy-game loss:
 
-## 9. Backups
+```bash
+fhsql <<'SQL'
+insert into point_adjustments (season_id, team_name, points, kind, game_date, note)
+select id, 'Oklahoma', -2, 'buy_game_loss', '2026-11-02', 'Lost 64-68 at home to East Texas A&M'
+from seasons where label = '2026-27';
+SQL
+```
 
-The Sheets version had `backupTeams()`. Here:
+## 8. Schedule the syncs
 
-- **Proxmox**: schedule a `vzdump` backup of the VM (Datacenter → Backup), ideally to a
-  Proxmox Backup Server or a NAS.
-- **Database**: a nightly logical dump in the VM's crontab:
+```bash
+cd ~/fantasy-hoops
+fhsql -v service_role_key="$(envval SERVICE_ROLE_KEY)" < supabase/schedule.sql
+```
+
+This stores the service role key in Vault and creates three pg_cron jobs (times in UTC):
+
+| Job | When | What |
+|---|---|---|
+| `sync-today` | every 10 minutes | today's games and points |
+| `sync-yesterday` | 10:15 UTC daily | re-checks yesterday after the 3am Central rollover |
+| `sync-rankings` | 18:00 UTC daily | AP Top 25 |
+
+Re-run the same command after changing `SERVICE_ROLE_KEY`. To check on the jobs:
+
+```bash
+echo "select jobname, status, start_time from cron.job_run_details order by start_time desc limit 10;" | fhsql
+echo "select status_code, left(content, 200) from net._http_response order by created desc limit 5;" | fhsql
+```
+
+## 9. Run the web app
+
+```bash
+cd ~/fantasy-hoops
+printf 'SUPABASE_URL=http://localhost:8000\nSUPABASE_ANON_KEY=%s\n' "$(envval ANON_KEY)" > .env.local
+npm ci
+npm run build
+```
+
+The app only ever gets the **anon** key, never the service role key. It reads Supabase on
+the server, so browsers never talk to Supabase directly.
+
+Create `/etc/systemd/system/fantasy-hoops.service` (replace `aidan` with your VM username):
+
+```ini
+[Unit]
+Description=Fantasy Hoops web app
+After=network-online.target docker.service
+Wants=network-online.target
+
+[Service]
+User=aidan
+WorkingDirectory=/home/aidan/fantasy-hoops
+Environment=NODE_ENV=production
+Environment=PORT=3000
+ExecStart=/usr/bin/npm run start
+Restart=always
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target
+```
+
+```bash
+sudo systemctl daemon-reload
+sudo systemctl enable --now fantasy-hoops
+systemctl status fantasy-hoops        # logs: journalctl -u fantasy-hoops -f
+```
+
+The site is now at `http://supabase-vm.lan:3000` on your network.
+
+## 10. Sharing it with the league
+
+- **Don't port-forward anything** on your router: not 3000, not Kong (8000), Studio or Postgres.
+- Publish only port 3000 through **Cloudflare Tunnel** (free; needs a domain on Cloudflare)
+  or **Tailscale Funnel** (free; gives a `*.ts.net` URL). Both connect outbound, so no
+  firewall changes are needed.
+  - Cloudflare: install `cloudflared` in the VM, create a tunnel, and route a hostname to
+    `http://localhost:3000`.
+  - Tailscale: install Tailscale in the VM, then `sudo tailscale funnel --bg 3000`.
+- Studio stays reachable only from your network (or over Tailscale).
+
+## 11. Backups
+
+- **Proxmox**: schedule a backup of the VM (Datacenter → Backup), ideally to a Proxmox
+  Backup Server or a NAS. That covers everything, including Supabase's `.env`.
+- **Database**: a nightly dump, in root's crontab (`sudo crontab -e`):
+
   ```
-  0 9 * * * docker exec supabase-db pg_dump -U postgres -Fc postgres > /var/backups/fantasy-$(date +\%F).dump
+  0 9 * * * docker exec supabase-db pg_dump -U postgres -Fc postgres > /var/backups/fantasy-$(date +\%F).dump && find /var/backups -name 'fantasy-*.dump' -mtime +30 -delete
   ```
-  Restore with `pg_restore`. Because scores are an idempotent ledger, you can also rebuild
-  any date range just by re-running `sync-scores`.
+
+  Restore with `pg_restore`. Scores can also be rebuilt for any date range just by
+  re-running `sync-scores` (step 7), since they're computed from game data.
+
+## 12. Updating later
+
+```bash
+cd ~/fantasy-hoops && git pull
+for f in supabase/migrations/*.sql; do echo "$f"; fhsql < "$f"; done   # see note below
+SUPABASE_DOCKER_DIR=/opt/supabase/docker ./scripts/deploy-functions.sh
+npm ci && npm run build && sudo systemctl restart fantasy-hoops
+```
+
+Migrations are **not** all safe to re-run: apply only the new files (compare
+`git diff --name-only HEAD@{1} -- supabase/migrations` after the pull). If a migration
+changed scoring rules, re-run the sync for the season (step 7).
+
+## Optional: self-host the NCAA API
+
+The public `ncaa-api.henrygd.me` instance is limited to about 5 requests/second and can go
+down. The project (github.com/henrygd/ncaa-api) ships a Docker image; add it as a service
+in Supabase's compose file and set `NCAA_API_BASE` (step 3) to point at it.
