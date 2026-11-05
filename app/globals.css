@@ -1,5 +1,33 @@
+/* Palette carried over from the Apps Script teams page (Tailwind slate), plus dark mode. */
 :root {
   color-scheme: light dark;
+  --bg: #f8fafc;
+  --surface: #ffffff;
+  --border: #e2e8f0;
+  --border-strong: #cbd5e1;
+  --tab-idle: #e2e8f0;
+  --text: #0f172a;
+  --muted: #64748b;
+  --gain: #15803d;
+  --loss: #b91c1c;
+  --live: #c2410c;
+  --shadow: 0 1px 2px rgba(15, 23, 42, 0.08);
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #0b1120;
+    --surface: #111827;
+    --border: #1f2937;
+    --border-strong: #334155;
+    --tab-idle: #1e293b;
+    --text: #e2e8f0;
+    --muted: #94a3b8;
+    --gain: #4ade80;
+    --loss: #f87171;
+    --live: #fb923c;
+    --shadow: none;
+  }
 }
 
 * {
@@ -8,14 +36,285 @@
 
 body {
   margin: 0;
-  font-family: Arial, Helvetica, sans-serif;
+  font-family: 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+  font-size: 17px;
+  line-height: 1.5;
+  color: var(--text);
+  background: var(--bg);
 }
 
-.container {
-  min-height: 100vh;
-  display: grid;
-  place-content: center;
-  gap: 0.5rem;
+.page {
+  margin: 0 auto;
+  padding: 28px 18px 48px;
+  max-width: 1000px;
+}
+
+h1 {
+  margin: 0 0 4px;
+  font-size: clamp(2rem, 5vw, 2.75rem);
+  letter-spacing: -0.01em;
+}
+
+.description {
+  margin: 0;
+  color: var(--muted);
+}
+
+/* Tabs */
+.tabs {
+  display: flex;
+  gap: 8px;
+  margin: 20px 0 16px;
+  border-bottom: 1px solid var(--border);
+  overflow-x: auto;
+}
+
+.tab-button {
+  flex: none;
+  padding: 9px 14px;
+  border: 1px solid var(--border);
+  border-bottom: none;
+  border-radius: 8px 8px 0 0;
+  background: var(--tab-idle);
+  color: var(--text);
+  font: inherit;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.tab-button.active {
+  background: var(--surface);
+  border-color: var(--border-strong);
+  box-shadow: 0 -1px 4px rgba(0, 0, 0, 0.06);
+}
+
+.tab-button:focus-visible,
+.manager-summary:focus-visible,
+.search-input:focus-visible {
+  outline: 2px solid #3b82f6;
+  outline-offset: 2px;
+}
+
+/* Manager dropdowns */
+.manager-list {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.manager-dropdown {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  box-shadow: var(--shadow);
+}
+
+.manager-summary {
+  display: flex;
+  align-items: baseline;
+  gap: 12px;
+  padding: 12px 16px;
+  cursor: pointer;
+  list-style: none;
+}
+
+.manager-summary::-webkit-details-marker {
+  display: none;
+}
+
+.manager-summary::after {
+  content: '▸';
+  color: var(--muted);
+  transition: transform 0.15s ease;
+}
+
+.manager-dropdown[open] > .manager-summary::after {
+  transform: rotate(90deg);
+}
+
+.manager-rank {
+  min-width: 2.2em;
+  color: var(--muted);
+  font-variant-numeric: tabular-nums;
+}
+
+.manager-name {
+  flex: 1;
+  font-weight: 600;
+}
+
+.manager-points {
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+}
+
+.manager-dropdown .table-wrapper {
+  border-top: 1px solid var(--border);
+}
+
+.rank-up,
+.rank-down {
+  margin-left: 6px;
+  font-size: 0.8em;
+  font-weight: 600;
+}
+
+.rank-up {
+  color: var(--gain);
+}
+
+.rank-down {
+  color: var(--loss);
+}
+
+/* Tables */
+.table-wrapper {
+  overflow-x: auto;
+}
+
+.search-input + .table-wrapper,
+.scores-table {
+  background: var(--surface);
+}
+
+.search-input + .table-wrapper,
+.page > section > .table-wrapper {
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  box-shadow: var(--shadow);
+}
+
+table {
+  width: 100%;
+  border-collapse: collapse;
+}
+
+th,
+td {
+  padding: 10px 16px;
+  text-align: left;
+  vertical-align: top;
+}
+
+th {
+  color: var(--muted);
+  font-size: 0.8em;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+tbody tr + tr td {
+  border-top: 1px solid var(--border);
+}
+
+.num {
+  text-align: right;
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+}
+
+.center {
   text-align: center;
-  padding: 2rem;
+}
+
+.right {
+  text-align: right;
+}
+
+.scores-table {
+  table-layout: fixed;
+}
+
+.matchup,
+.team-manager,
+.status {
+  display: block;
+  color: var(--muted);
+  font-size: 0.88em;
+}
+
+.muted {
+  color: var(--muted);
+}
+
+.potential {
+  display: inline-block;
+  padding: 0 6px;
+  border: 1px solid var(--border-strong);
+  border-radius: 999px;
+  color: var(--muted);
+  font-size: 0.8em;
+  white-space: nowrap;
+}
+
+.points-gain,
+.points-loss {
+  font-weight: 600;
+  font-size: 0.9em;
+}
+
+.points-gain {
+  color: var(--gain);
+}
+
+.points-loss {
+  color: var(--loss);
+}
+
+.live-indicator {
+  color: var(--live);
+  font-weight: 600;
+}
+
+/* Search */
+.search-input {
+  width: 100%;
+  margin-bottom: 12px;
+  padding: 10px 14px;
+  border: 1px solid var(--border-strong);
+  border-radius: 8px;
+  background: var(--surface);
+  color: var(--text);
+  font: inherit;
+}
+
+.empty-state {
+  color: var(--muted);
+}
+
+.error {
+  padding: 12px 16px;
+  border: 1px solid var(--loss);
+  border-radius: 8px;
+  color: var(--loss);
+}
+
+@media (max-width: 640px) {
+  body {
+    font-size: 16px;
+  }
+
+  .page {
+    padding: 20px 12px 40px;
+  }
+
+  th,
+  td {
+    padding: 8px 10px;
+  }
+
+  .manager-summary {
+    padding: 12px;
+    gap: 8px;
+  }
+
+  .tabs {
+    gap: 4px;
+  }
+
+  .tab-button {
+    padding: 8px 10px;
+    font-size: 0.9em;
+  }
 }

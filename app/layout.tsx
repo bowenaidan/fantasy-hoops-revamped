@@ -3,8 +3,8 @@ import type { Metadata } from 'next';
 import type { ReactNode } from 'react';
 
 export const metadata: Metadata = {
-  title: 'Fantasy Hoops Revamped',
-  description: 'A basic Next.js starter.',
+  title: 'Fantasy Hoops',
+  description: 'College basketball fantasy league standings and live scores.',
 };
 
 type RootLayoutProps = {
