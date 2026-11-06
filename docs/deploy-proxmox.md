@@ -57,12 +57,30 @@ sudo chown -R "$USER": /opt/supabase
 cd /opt/supabase/docker && cp .env.example .env
 ```
 
-Edit `/opt/supabase/docker/.env` and **change every secret**:
+Generate every secret (the defaults in `.env.example` are public; never keep them):
 
-- `POSTGRES_PASSWORD`, `JWT_SECRET`, `DASHBOARD_USERNAME`, `DASHBOARD_PASSWORD`.
-- `ANON_KEY` and `SERVICE_ROLE_KEY`: generate both from your `JWT_SECRET` as described in
-  the self-hosting guide's API keys section. The defaults are public; never keep them.
+```bash
+cd /opt/supabase/docker
+sh utils/generate-keys.sh --update-env
+```
+
+This creates a new `JWT_SECRET`, the `ANON_KEY` and `SERVICE_ROLE_KEY` signed with it,
+`POSTGRES_PASSWORD`, `DASHBOARD_PASSWORD` and the other internal secrets, and writes them
+into `.env` (the previous file is kept as `.env.old`). Save the printed output in a password
+manager. Don't run `utils/add-new-auth-keys.sh`: this app uses the `ANON_KEY` /
+`SERVICE_ROLE_KEY` pair.
+
+Then edit `/opt/supabase/docker/.env`:
+
+- `SUPABASE_PUBLIC_URL=http://supabase-vm.lan:8000` (your VM's IP or hostname), so Studio
+  works from your own computer. Set `API_EXTERNAL_URL` to the same host
+  (`http://supabase-vm.lan:8000/auth/v1`).
+- Optionally change `DASHBOARD_USERNAME` (the Studio login).
 - Add `ODDS_API_KEY=...` (your key from the-odds-api.com).
+
+Recent versions of this stack use Envoy as the API gateway (service `api-gw`) instead of
+Kong. It keeps `kong` as a network alias and listens on port 8000, so everything below works
+with either.
 
 In `docker-compose.yml`, add the app's settings to the `functions` service:
 
@@ -197,7 +215,7 @@ This stores the service role key in Vault and creates three pg_cron jobs (times 
 Re-run the same command after changing `SERVICE_ROLE_KEY`. To check on the jobs:
 
 ```bash
-echo "select jobname, status, start_time from cron.job_run_details order by start_time desc limit 10;" | fhsql
+echo "select j.jobname, d.status, d.start_time, left(d.return_message, 80) from cron.job_run_details d join cron.job j using (jobid) order by d.start_time desc limit 10;" | fhsql
 echo "select status_code, left(content, 200) from net._http_response order by created desc limit 5;" | fhsql
 ```
 
