@@ -322,12 +322,23 @@ swap in another account's cookie.
 3. Add RSSHub to the Supabase stack and restart it:
 
    ```bash
-   cp ~/fantasy-hoops/deploy/docker-compose.override.yml /opt/supabase/docker/
-   cd /opt/supabase/docker && docker compose up -d
+   cd /opt/supabase/docker
+   cp ~/fantasy-hoops/deploy/docker-compose.override.yml fantasy-hoops.override.yml
+   main=$(ls docker-compose.yml compose.yaml compose.yml 2>/dev/null | head -1)
+   sed -i '/^COMPOSE_FILE=/d' .env
+   echo "COMPOSE_FILE=$main:fantasy-hoops.override.yml" >> .env
+   docker compose config --services | grep rsshub    # must list rsshub and rsshub-redis
+   docker compose up -d
    ```
 
-   Docker Compose merges `docker-compose.override.yml` automatically. It adds `rsshub`
-   and its Redis cache (no published ports) and sets `BUY_GAME_FEED_URL` for the functions.
+   `COMPOSE_FILE` tells Compose to load both files, rather than relying on its automatic
+   override naming (which only works when the names match the main file's style, and is
+   ignored if `COMPOSE_FILE` is already set). The extra file adds `rsshub` and its Redis cache
+   (no published ports) and sets `BUY_GAME_FEED_URL` for the functions. If you edit
+   `.env` by hand later, keep that one `COMPOSE_FILE` line.
+
+   When `deploy/docker-compose.override.yml` changes in the repo, copy it again and run
+   `docker compose up -d`.
 
 4. Check the feed, then do a dry run (prints what it would record, writes nothing):
 
