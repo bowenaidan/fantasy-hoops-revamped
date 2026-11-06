@@ -48,3 +48,27 @@ export function gameStatus(game: StatusFields): string {
   const clock = (game.contest_clock ?? '').trim().replace(/^0(\d:)/, '$1'); // "05:13" -> "5:13"
   return [period, clock].filter(Boolean).join(' ') || 'Live';
 }
+
+const toNumber = (n: number | string | null | undefined) =>
+  n === null || n === undefined || n === '' || Number.isNaN(Number(n)) ? null : Number(n);
+
+/** "-4.5", "+4.5", or "PK" for a pick'em; "" when there's no spread. */
+export function formatSpread(n: number | string | null | undefined): string {
+  const v = toNumber(n);
+  if (v === null) return '';
+  return v === 0 ? 'PK' : v > 0 ? `+${v}` : String(v);
+}
+
+/** American moneyline: "+750", "-1200"; "" when missing. */
+export function formatMoneyline(n: number | string | null | undefined): string {
+  const v = toNumber(n);
+  if (v === null) return '';
+  return v > 0 ? `+${v}` : String(v);
+}
+
+/** One team's line, e.g. "-18.5 (-1800)", or "" if there's none. */
+export function formatLine(spread: number | string | null | undefined, moneyline: number | string | null | undefined): string {
+  const s = formatSpread(spread);
+  const ml = formatMoneyline(moneyline);
+  return s && ml ? `${s} (${ml})` : s || ml;
+}

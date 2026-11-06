@@ -38,7 +38,7 @@ All are `POST` and require the **service role** key as `Authorization: Bearer ..
 |---|---|---|
 | `sync-scores` | `{}`, `{"date":"yesterday"}`, `{"date":"YYYY-MM-DD"}`, or `{"startDate","endDate"}` (31 days max) | games + scoring |
 | `sync-rankings` | none | AP Top 25 into `teams.ap_rank` |
-| `update-odds` | none | fetch NCAAB moneylines (not yet matched to games) |
+| `update-odds` | none | spreads + moneylines from The Odds API onto today's league games (2 credits per call) |
 | `sync-buy-games` | none, or `{"dryRun":true}` | buy-game posts (via a self-hosted RSSHub feed) into −2 adjustments; see the deploy guide |
 
 ## Development

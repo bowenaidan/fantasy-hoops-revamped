@@ -51,5 +51,9 @@ select cron.schedule('sync-yesterday', '15 10 * * *', $$select private.call_func
 select cron.schedule('sync-rankings', '0 18 * * *', $$select private.call_function('sync-rankings')$$);
 
 select cron.schedule('sync-buy-games', '7,37 * * * *', $$select private.call_function('sync-buy-games')$$);
+-- Betting lines for today's games: 9:05am, 2:05pm, 5:05pm Central in winter (an hour later
+-- in summer). 2 Odds API credits per call, about 190 a month of the free 500; skipped
+-- (no credits) when no league game is still to come.
+select cron.schedule('update-odds', '5 15,20,23 * * *', $$select private.call_function('update-odds')$$);
 
 select jobname, schedule from cron.job order by jobname;

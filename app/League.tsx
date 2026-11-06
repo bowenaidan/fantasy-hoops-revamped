@@ -3,7 +3,7 @@
 import { usePathname, useRouter, useSearchParams } from 'next/navigation';
 import { useEffect, useMemo, useState } from 'react';
 import type { GameRow, LeagueData, ManagerRow, TeamRow } from '@/lib/data';
-import { formatPoints, formatSigned, formatTime, gameStatus, isPre, withRank } from '@/lib/format';
+import { formatLine, formatPoints, formatSigned, formatTime, gameStatus, isPre, withRank } from '@/lib/format';
 
 const REFRESH_MS = 60_000;
 
@@ -233,9 +233,16 @@ function TodayCell({ team, game }: { team: TeamRow; game: GameRow | undefined })
   );
 
   if (isPre(game)) {
+    const line = teamLine(game, team.team_name);
     return (
       <>
-        <span className="muted">{formatTime(game.start_time) || 'Scheduled'}</span> {potentialNote}
+        <span className="muted">{formatTime(game.start_time) || 'Scheduled'}</span>{' '}
+        {line && (
+          <span className="odds" title={oddsTitle(game)}>
+            {line}
+          </span>
+        )}{' '}
+        {potentialNote}
       </>
     );
   }
@@ -258,12 +265,24 @@ function ScoresPanel({ games, teams }: { games: GameRow[]; teams: TeamRow[] }) {
   const managerByTeam = useMemo(() => new Map(teams.map((t) => [t.team_name, t.manager_name])), [teams]);
   if (!games.length) return <p className="empty-state">No games today.</p>;
 
-  const side = (name: string, rank: number | null, winner: boolean, final: boolean) => (
-    <>
-      <strong className={final && !winner ? 'muted' : ''}>{withRank(name, rank)}</strong>
-      {managerByTeam.has(name) && <span className="team-manager">{managerByTeam.get(name)}</span>}
-    </>
-  );
+  const side = (g: GameRow, home: boolean) => {
+    const name = home ? g.home_team : g.away_team;
+    const winner = home ? g.home_winner : g.away_winner;
+    const line = teamLine(g, name);
+    return (
+      <>
+        <strong className={g.is_final && !winner ? 'muted' : ''}>
+          {withRank(name, home ? g.home_rank : g.away_rank)}
+        </strong>
+        {managerByTeam.has(name) && <span className="team-manager">{managerByTeam.get(name)}</span>}
+        {line && (
+          <span className="odds odds-block" title={oddsTitle(g)}>
+            {line}
+          </span>
+        )}
+      </>
+    );
+  };
 
   return (
     <div className="table-wrapper">
@@ -278,18 +297,29 @@ function ScoresPanel({ games, teams }: { games: GameRow[]; teams: TeamRow[] }) {
         <tbody>
           {games.map((g) => (
             <tr key={g.ncaa_game_id}>
-              <td>{side(g.home_team, g.home_rank, g.home_winner, g.is_final)}</td>
+              <td>{side(g, true)}</td>
               <td className="center">
                 <strong className={g.game_state === 'live' ? 'live-indicator' : ''}>
                   {isPre(g) ? '–' : `${g.home_score ?? 0} – ${g.away_score ?? 0}`}
                 </strong>
                 <span className="muted status">{gameStatus(g)}</span>
               </td>
-              <td className="right">{side(g.away_team, g.away_rank, g.away_winner, g.is_final)}</td>
+              <td className="right">{side(g, false)}</td>
             </tr>
           ))}
         </tbody>
       </table>
     </div>
   );
+}
+
+/** A team's spread and moneyline in a game, e.g. "-18.5 (-1800)"; "" if there's no line. */
+function teamLine(game: GameRow, teamName: string): string {
+  const home = game.home_team === teamName;
+  const spread = game.home_spread == null ? null : home ? Number(game.home_spread) : -Number(game.home_spread);
+  return formatLine(spread, home ? game.home_odds : game.away_odds);
+}
+
+function oddsTitle(game: GameRow): string {
+  return `Spread (moneyline)${game.odds_bookmaker ? ` from ${game.odds_bookmaker}` : ''}; last line before tip-off`;
 }

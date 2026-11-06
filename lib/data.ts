@@ -47,6 +47,11 @@ export type GameRow = {
   away_score: number | null;
   away_winner: boolean;
   updated_at: string;
+  // Betting line (update-odds). Null when there's no line or odds aren't set up.
+  home_odds?: number | null;
+  away_odds?: number | null;
+  home_spread?: number | null;
+  odds_bookmaker?: string | null;
 };
 
 export type LeagueData = {

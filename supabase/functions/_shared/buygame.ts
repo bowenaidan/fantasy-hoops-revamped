@@ -3,7 +3,7 @@
 // Pure functions only, so they can be unit tested; sync-buy-games does the I/O.
 
 import { addDays } from "./dates.ts";
-import aliasTable from "./team_aliases.json" with { type: "json" };
+import { teamKey } from "./names.ts";
 
 /** Points for a rostered team that loses a buy game (Point Structure sheet). */
 export const BUY_GAME_PENALTY = -2;
@@ -23,28 +23,6 @@ export function parseBuyGamePost(text: string): BuyGamePost | null {
   const loser = clean(m[1]);
   const winner = clean(m[2]);
   return loser && winner ? { loser, winner } : null;
-}
-
-/** "Saint Mary's" / "St. Mary's" -> "st marys", "Iowa State" / "Iowa St." -> "iowa st". */
-function baseKey(name: string): string {
-  return name
-    .toLowerCase()
-    .replace(/&amp;/g, "&")
-    .replace(/[.'’]/g, "")
-    .replace(/\bsaint\b/g, "st")
-    .replace(/\bstate\b/g, "st")
-    .replace(/\s+/g, " ")
-    .trim();
-}
-
-// Common spellings -> NCAA scoreboard short names ("USC" -> "Southern California"),
-// shared with scripts/import_league.py.
-const ALIASES = new Map(Object.entries(aliasTable).map(([spelling, ncaa]) => [baseKey(spelling), baseKey(ncaa)]));
-
-/** Comparison key for a team name, with common spellings mapped to the NCAA name. */
-export function teamKey(name: string): string {
-  const key = baseKey(name);
-  return ALIASES.get(key) ?? ALIASES.get(key.replace(/^the /, "")) ?? key;
 }
 
 /** One URL per post (twitter.com and x.com links, with or without ?query), for dedupe. */

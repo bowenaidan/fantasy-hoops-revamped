@@ -1,5 +1,6 @@
 import { assertEquals } from "jsr:@std/assert@1";
-import { canonicalPostUrl, findBuyGame, parseBuyGamePost, type StoredGame, teamKey } from "../_shared/buygame.ts";
+import { canonicalPostUrl, findBuyGame, parseBuyGamePost, type StoredGame } from "../_shared/buygame.ts";
+import { teamKey } from "../_shared/names.ts";
 
 Deno.test("parses buy-game posts", () => {
   assertEquals(

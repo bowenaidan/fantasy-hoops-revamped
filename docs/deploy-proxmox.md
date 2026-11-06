@@ -213,6 +213,7 @@ This stores the service role key in Vault and creates three pg_cron jobs (times 
 | `sync-today` | every 10 minutes | today's games and points |
 | `sync-yesterday` | 10:15 UTC daily | re-checks yesterday after the 3am Central rollover |
 | `sync-rankings` | 18:00 UTC daily | AP Top 25 |
+| `update-odds` | 15:05, 20:05, 23:05 UTC | betting lines for today's games (see [Betting odds](#betting-odds)) |
 | `sync-buy-games` | :07 and :37 past each hour | buy-game posts (only once the feed below is set up) |
 
 Re-run the same command after changing `SERVICE_ROLE_KEY`. To check on the jobs:
@@ -299,6 +300,35 @@ npm ci && npm run build && sudo systemctl restart fantasy-hoops
 Migrations are **not** all safe to re-run: apply only the new files (compare
 `git diff --name-only HEAD@{1} -- supabase/migrations` after the pull). If a migration
 changed scoring rules, re-run the sync for the season (step 7).
+
+## Betting odds
+
+`update-odds` puts each league game's spread and moneyline (e.g. `-18.5 (-1800)`) on the
+Scores tab and next to upcoming games in the standings. It uses
+[The Odds API](https://the-odds-api.com); the free plan has 500 credits a month.
+
+1. Sign up for the free plan and copy the API key from the email.
+2. Put it in `/opt/supabase/docker/.env` as `ODDS_API_KEY=<key>` (step 3), and make sure the
+   `functions` service passes it through (`ODDS_API_KEY: ${ODDS_API_KEY}`, step 3).
+3. Recreate the functions container so it sees the key: `docker compose up -d` in
+   `/opt/supabase/docker`.
+4. Try it (uses 2 credits if a league game is still to come today):
+
+   ```bash
+   curl -s -X POST http://localhost:8000/functions/v1/update-odds \
+     -H "Authorization: Bearer $(envval SERVICE_ROLE_KEY)"; echo
+   ```
+
+   `updated` lists the games that got a line, `creditsRemaining` what's left this month.
+   `noLine` is usually small schools that books don't list. If a big game shows up there,
+   its Odds API spelling ("Ole Miss Rebels") didn't match the NCAA name: add the school
+   part to `supabase/functions/_shared/team_aliases.json` (`"ole miss": "Ole Miss"`).
+
+5. Re-run `schedule.sql` (step 8). It calls `update-odds` three times a day, about 190
+   credits a month. Each call costs 2 credits (moneyline + spread). Calls are skipped,
+   free, when there's no upcoming league game.
+
+Lines are only updated before tip-off, so a finished game shows its last pre-game line.
 
 ## Optional: buy-game feed
 
