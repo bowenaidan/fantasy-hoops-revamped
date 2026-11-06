@@ -17,7 +17,8 @@ scoreboard's short names ("Florida St.", "Southern California", "Saint Mary's (C
 To know those, the script pulls a couple of weeks of NCAA scoreboards (--index-start,
 --index-days), which also tells it which API conference each sheet conference is.
 Anything it can't match is listed on stderr and the script exits non-zero, so nothing
-is imported half-matched. Fix by adding to ALIASES below.
+is imported half-matched. Fix by adding to
+supabase/functions/_shared/team_aliases.json.
 
 Standard library only, so it runs anywhere with python3 (including the Proxmox VM).
 """
@@ -34,155 +35,16 @@ import unicodedata
 import urllib.request
 import xml.etree.ElementTree as ET
 import zipfile
+from pathlib import Path
 
 NCAA_API_BASE = "https://ncaa-api.henrygd.me"
 # The API rejects Python's default urllib user agent with 403.
 USER_AGENT = "fantasy-hoops-import/1.0"
 
-# Spreadsheet name (after normalize()) -> NCAA scoreboard short name.
-ALIASES = {
-    "usc": "Southern California",
-    "unc": "North Carolina",
-    "miami": "Miami (FL)",
-    "miami (oh)": "Miami (OH)",
-    "pitt": "Pittsburgh",
-    "saint mary's": "Saint Mary's (CA)",
-    "st. thomas": "St. Thomas (MN)",
-    "st. john's": "St. John's (NY)",
-    "queens": "Queens (NC)",
-    "charleston": "Col. of Charleston",
-    "saint joe's": "Saint Joseph's",
-    "unc wilmington": "UNCW",
-    "unc wilmgton": "UNCW",
-    "unc greensboro": "UNC Greensboro",
-    "unc asheville": "UNC Asheville",
-    "charleston suthern": "Charleston So.",
-    "charleston southern": "Charleston So.",
-    "binghampton": "Binghamton",
-    "loyola chicago": "Loyola Chicago",
-    "loyola marymount": "LMU (CA)",
-    "loyola md": "Loyola Maryland",
-    "fairleigh dickinson": "FDU",
-    "fgcu": "FGCU",
-    "liu": "LIU",
-    "uic": "UIC",
-    "umbc": "UMBC",
-    "ut martin": "UT Martin",
-    "ut arlington": "UT Arlington",
-    "ut rio grande valley": "UTRGV",
-    "utrgv": "UTRGV",
-    "texas a&m cc": "A&M-Corpus Christi",
-    "east texas a&m": "East Texas A&M",
-    "se louisiana": "Southeastern La.",
-    "southeast missouri": "Southeast Mo. St.",
-    "siu edwardsville": "SIUE",
-    "prairie view a&m": "Prairie View",
-    "arkansas pine bluff": "Ark.-Pine Bluff",
-    "mississippi valley st.": "Mississippi Val.",
-    "maryland eastern shore": "UMES",
-    "north carolina central": "N.C. Central",
-    "north carolina a&t": "N.C. A&T",
-    "south carolina st.": "South Carolina St.",
-    "bethune-cookman": "Bethune-Cookman",
-    "florida a&m": "Florida A&M",
-    "alabama a&m": "Alabama A&M",
-    "app st.": "App State",
-    "ulm": "ULM",
-    "louisiana": "Louisiana",
-    "fiu": "FIU",
-    "uab": "UAB",
-    "utsa": "UTSA",
-    "utep": "UTEP",
-    "ucf": "UCF",
-    "smu": "SMU",
-    "tcu": "TCU",
-    "byu": "BYU",
-    "lsu": "LSU",
-    "vcu": "VCU",
-    "unlv": "UNLV",
-    "njit": "NJIT",
-    "etsu": "ETSU",
-    "vmi": "VMI",
-    "csun": "CSUN",
-    "uc santa barbara": "UC Santa Barbara",
-    "hawai'i": "Hawaii",
-    "depaul": "DePaul",
-    "cal": "California",
-    "cal baptist": "California Baptist",
-    "cal st. bakersfield": "CSU Bakersfield",
-    "cal st. fullerton": "Cal St. Fullerton",
-    "long beach st.": "Long Beach St.",
-    "sacramento st.": "Sacramento St.",
-    "ole miss": "Ole Miss",
-    "umass": "Massachusetts",
-    "umass lowell": "UMass Lowell",
-    "kansas city": "Kansas City",
-    "omaha": "Omaha",
-    "iu indy": "IU Indy",
-    "purdue fort wayne": "Purdue Fort Wayne",
-    "detroit mercy": "Detroit Mercy",
-    "green bay": "Green Bay",
-    "milwaukee": "Milwaukee",
-    "le moyne": "Le Moyne",
-    "mount st. mary's": "Mount St. Mary's",
-    "saint peter's": "Saint Peter's",
-    "st. bonaventure": "St. Bonaventure",
-    "the citadel": "The Citadel",
-    "western carolina": "Western Caro.",
-    "western kentucky": "Western Ky.",
-    "eastern kentucky": "Eastern Ky.",
-    "central arkansas": "Central Ark.",
-    "north alabama": "North Ala.",
-    "west georgia": "West Ga.",
-    "georgia southern": "Ga. Southern",
-    "middle tennessee": "Middle Tenn.",
-    "florida atlantic": "Fla. Atlantic",
-    "south florida": "South Fla.",
-    "east carolina": "East Carolina",
-    "northern iowa": "UNI",
-    "southern illinois": "Southern Ill.",
-    "illinois st.": "Illinois St.",
-    "northern illinois": "NIU",
-    "northern kentucky": "Northern Ky.",
-    "northern arizona": "Northern Ariz.",
-    "northern colorado": "Northern Colo.",
-    "eastern washington": "Eastern Wash.",
-    "eastern illinois": "Eastern Ill.",
-    "eastern michigan": "Eastern Mich.",
-    "western michigan": "Western Mich.",
-    "central michigan": "Central Mich.",
-    "western illinois": "Western Ill.",
-    "southern indiana": "Southern Ind.",
-    "southern utah": "Southern Utah",
-    "central connecticut": "Central Conn. St.",
-    "north florida": "North Florida",
-    "houston christian": "Houston Christian",
-    "incarnate word": "UIW",
-    "stephen f. austin": "SFA",
-    "northwestern st.": "Northwestern St.",
-    "nicholls": "Nicholls",
-    "new orleans": "LSU New Orleans",
-    "grambling st.": "Grambling",
-    "albany": "UAlbany",
-    "alcorn st.": "Alcorn",
-    "lamar": "Lamar University",
-    "southern miss": "Southern Miss.",
-    "southern": "Southern U.",
-    "mercyhurst": "Mercyhurst",
-    "new haven": "New Haven",
-    "stonehill": "Stonehill",
-    "west florida": "West Florida",
-    "gardner-webb": "Gardner-Webb",
-    "usc upstate": "USC Upstate",
-    "boston": "Boston U.",
-    "army": "Army West Point",
-    "loyola maryland": "Loyola Maryland",
-    "william & mary": "William & Mary",
-    "seattle": "Seattle U",
-    "denver": "Denver",
-    "texas": "Texas",
-    "texas a&m": "Texas A&M",
-}
+# Spreadsheet spelling (after normalize()) -> NCAA scoreboard short name. Shared with
+# the sync-buy-games edge function, so add new spellings to the JSON file.
+ALIASES_PATH = Path(__file__).resolve().parent.parent / "supabase/functions/_shared/team_aliases.json"
+ALIASES: dict[str, str] = json.loads(ALIASES_PATH.read_text())
 
 TIER_LABELS = {
     "high majors": "highMajor",
@@ -416,7 +278,7 @@ def main():
 
     problems = []
     if resolve.missing:
-        problems.append("Unmatched team names (add to ALIASES): " + ", ".join(sorted(set(resolve.missing))))
+        problems.append("Unmatched team names (add to supabase/functions/_shared/team_aliases.json): " + ", ".join(sorted(set(resolve.missing))))
     if any(seo is None for *_, seo, _ in conferences):
         problems.append("Conferences with no matched teams: " + ", ".join(c for _, c, s, _ in conferences if not s))
     dup = [s for s, n in collections.Counter(seo for _, _, seo, _ in conferences).items() if n > 1]
