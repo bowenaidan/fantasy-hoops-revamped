@@ -9,7 +9,7 @@ create extension if not exists pg_cron with schema pg_catalog;
 create extension if not exists pg_net with schema extensions;
 
 -- Keep the service role key in Vault rather than in the job definitions.
-select set_config('fh.service_role_key', :'service_role_key', false);
+select set_config('fh.service_role_key', :'service_role_key', false) <> '' as key_loaded;
 do $$
 declare
   existing uuid;
