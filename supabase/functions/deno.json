@@ -2,7 +2,7 @@
   "nodeModulesDir": "none",
   "tasks": {
     "test": "deno test --allow-read tests/",
-    "check": "deno check sync-scores/index.ts sync-rankings/index.ts update-odds/index.ts _shared/rss.ts"
+    "check": "deno check sync-scores/index.ts sync-rankings/index.ts update-odds/index.ts sync-buy-games/index.ts"
   },
   "lint": {
     "rules": {

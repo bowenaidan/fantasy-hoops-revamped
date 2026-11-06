@@ -1,0 +1,35 @@
+# Buy-game feed: RSSHub turns @JonRothstein's posts into RSS for sync-buy-games.
+#
+# Copy to /opt/supabase/docker/docker-compose.override.yml. Docker Compose merges a file
+# with this name into docker-compose.yml automatically, so Supabase's own file stays stock.
+# Put TWITTER_AUTH_TOKEN (the auth_token cookie of a throwaway X account) in
+# /opt/supabase/docker/.env. See docs/deploy-proxmox.md, "Buy-game feed".
+#
+# No ports are published: only the functions container talks to RSSHub, over the compose
+# network.
+
+services:
+  rsshub:
+    image: diygod/rsshub:latest
+    restart: unless-stopped
+    environment:
+      NODE_ENV: production
+      CACHE_TYPE: redis
+      REDIS_URL: redis://rsshub-redis:6379/
+      TWITTER_AUTH_TOKEN: ${TWITTER_AUTH_TOKEN:?Set TWITTER_AUTH_TOKEN in .env}
+    depends_on:
+      - rsshub-redis
+
+  rsshub-redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+    volumes:
+      - rsshub-redis:/data
+
+  functions:
+    environment:
+      # Original posts only (no retweets or replies).
+      BUY_GAME_FEED_URL: "http://rsshub:1200/twitter/user/JonRothstein/includeRts=0&count=40"
+
+volumes:
+  rsshub-redis:

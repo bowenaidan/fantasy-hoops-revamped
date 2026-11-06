@@ -50,4 +50,6 @@ select cron.schedule('sync-yesterday', '15 10 * * *', $$select private.call_func
 -- AP poll (released Mondays; daily is cheap).
 select cron.schedule('sync-rankings', '0 18 * * *', $$select private.call_function('sync-rankings')$$);
 
+select cron.schedule('sync-buy-games', '7,37 * * * *', $$select private.call_function('sync-buy-games')$$);
+
 select jobname, schedule from cron.job order by jobname;

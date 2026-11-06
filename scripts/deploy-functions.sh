@@ -13,7 +13,7 @@ set -euo pipefail
 SRC="$(cd "$(dirname "$0")/../supabase/functions" && pwd)"
 DEST="${SUPABASE_DOCKER_DIR%/}/volumes/functions/"
 
-for fn in _shared sync-scores sync-rankings update-odds; do
+for fn in _shared sync-scores sync-rankings update-odds sync-buy-games; do
   rsync -a --delete "$SRC/$fn/" "$DEST$fn/"
 done
 echo "Copied functions to $DEST"

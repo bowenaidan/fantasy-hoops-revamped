@@ -187,7 +187,9 @@ Re-running a sync is always safe.
 
 ### Buy-game losses and manual corrections
 
-These are entered by hand. For example, Oklahoma's 2026-27 buy-game loss:
+Buy-game losses can be picked up automatically from Jon Rothstein's posts (see
+[Buy-game feed](#optional-buy-game-feed) below), or entered by hand. For example,
+Oklahoma's 2026-27 buy-game loss:
 
 ```bash
 fhsql <<'SQL'
@@ -211,6 +213,7 @@ This stores the service role key in Vault and creates three pg_cron jobs (times 
 | `sync-today` | every 10 minutes | today's games and points |
 | `sync-yesterday` | 10:15 UTC daily | re-checks yesterday after the 3am Central rollover |
 | `sync-rankings` | 18:00 UTC daily | AP Top 25 |
+| `sync-buy-games` | :07 and :37 past each hour | buy-game posts (only once the feed below is set up) |
 
 Re-run the same command after changing `SERVICE_ROLE_KEY`. To check on the jobs:
 
@@ -296,6 +299,71 @@ npm ci && npm run build && sudo systemctl restart fantasy-hoops
 Migrations are **not** all safe to re-run: apply only the new files (compare
 `git diff --name-only HEAD@{1} -- supabase/migrations` after the pull). If a migration
 changed scoring rules, re-run the sync for the season (step 7).
+
+## Optional: buy-game feed
+
+`sync-buy-games` reads Jon Rothstein's X posts through a self-hosted
+[RSSHub](https://docs.rsshub.app) and turns "*Team* loses a buy game to *Team*." posts into
+−2 `buy_game_loss` adjustments for rostered teams.
+
+RSSHub reads X as a logged-in account, which is against X's terms. **Use a throwaway X
+account**, not your own: it can get locked or banned, and then the feed stops until you
+swap in another account's cookie.
+
+1. Create the throwaway account, log in to x.com with it in a browser, and copy its
+   `auth_token` cookie (developer tools → Application/Storage → Cookies → `https://x.com`).
+   It's a password-equivalent for that account: keep it out of git and chat.
+2. Add it to `/opt/supabase/docker/.env`:
+
+   ```
+   TWITTER_AUTH_TOKEN=<the cookie value>
+   ```
+
+3. Add RSSHub to the Supabase stack and restart it:
+
+   ```bash
+   cp ~/fantasy-hoops/deploy/docker-compose.override.yml /opt/supabase/docker/
+   cd /opt/supabase/docker && docker compose up -d
+   ```
+
+   Docker Compose merges `docker-compose.override.yml` automatically. It adds `rsshub`
+   and its Redis cache (no published ports) and sets `BUY_GAME_FEED_URL` for the functions.
+
+4. Check the feed, then do a dry run (prints what it would record, writes nothing):
+
+   ```bash
+   docker compose exec rsshub node -e "fetch('http://localhost:1200/twitter/user/JonRothstein/includeRts=0').then(r => r.text()).then(t => console.log(t.slice(0, 800)))"
+   curl -s -X POST http://localhost:8000/functions/v1/sync-buy-games \
+     -H "Authorization: Bearer $(envval SERVICE_ROLE_KEY)" -d '{"dryRun":true}'; echo
+   ```
+
+   The first command should print RSS XML with his recent posts. An error page there
+   usually means a bad or expired cookie; `docker compose logs rsshub` has the details.
+
+5. Re-run `schedule.sql` (step 8) to add the `sync-buy-games` job.
+
+How it decides:
+
+- The post must match "*X* loses/drops a buy game to *Y*". Retweets and replies aren't read.
+- *X* must have **lost a finished game** on the post's game day or up to two days before.
+  If *Y*'s name also matches, that game is used; otherwise only a single loss in that window
+  counts. Anything ambiguous is skipped.
+- *X* must be **rostered** that season. Posts about other teams show up under
+  `noLeagueGame` and are ignored.
+- Each post is recorded once (its URL is stored as `source_url`). A team that already has a
+  buy-game loss for that day, including one entered by hand, isn't penalized twice.
+
+Spellings that don't match an NCAA name ("Ole Miss", "UConn", ...) go in
+`supabase/functions/_shared/team_aliases.json`, which the league importer uses too. To undo
+an adjustment it got wrong:
+
+```bash
+echo "delete from point_adjustments where source_url = 'https://x.com/JonRothstein/status/<id>';" | fhsql
+```
+
+If the cookie stops working (RSSHub logs show auth errors, or the dry run reports a feed
+error), log in again or use a new throwaway account, update `TWITTER_AUTH_TOKEN`, and run
+`docker compose up -d rsshub`.
 
 ## Optional: self-host the NCAA API
 
