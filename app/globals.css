@@ -1,32 +1,36 @@
-/* Palette carried over from the Apps Script teams page (Tailwind slate), plus dark mode. */
+/*
+ * Fantasy Hoops. A gym-wall palette: painted off-white, deep ink, varsity royal for keyboard
+ * focus, banner gold for chances to score, shot-clock red only for live games.
+ * Barlow / Barlow Condensed throughout; condensed numerals do the heavy lifting.
+ */
 :root {
   color-scheme: light dark;
-  --bg: #f8fafc;
-  --surface: #ffffff;
-  --border: #e2e8f0;
-  --border-strong: #cbd5e1;
-  --tab-idle: #e2e8f0;
-  --text: #0f172a;
-  --muted: #64748b;
-  --gain: #15803d;
-  --loss: #b91c1c;
-  --live: #c2410c;
-  --shadow: 0 1px 2px rgba(15, 23, 42, 0.08);
+  --paper: #f2f3ef;
+  --surface: #fbfbf9;
+  --ink: #18202b;
+  --muted: #5b646f;
+  --rule: #d8dbd3;
+  --gold: #e3a20b;
+  --gold-ink: #7a5300;
+  --gain: #1d7a3e;
+  --loss: #b4291b;
+  --live: #d9381e;
+  --focus: #24418f;
 }
 
 @media (prefers-color-scheme: dark) {
   :root {
-    --bg: #0b1120;
-    --surface: #111827;
-    --border: #1f2937;
-    --border-strong: #334155;
-    --tab-idle: #1e293b;
-    --text: #e2e8f0;
-    --muted: #94a3b8;
-    --gain: #4ade80;
-    --loss: #f87171;
-    --live: #fb923c;
-    --shadow: none;
+    --paper: #10151c;
+    --surface: #161d26;
+    --ink: #e8ebe5;
+    --muted: #9aa3ad;
+    --rule: #2a333e;
+    --gold: #f2b731;
+    --gold-ink: #f2c45c;
+    --gain: #57c784;
+    --loss: #ff7d6e;
+    --live: #ff6a4d;
+    --focus: #a9bcff;
   }
 }
 
@@ -36,127 +40,298 @@
 
 body {
   margin: 0;
-  font-family: 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+  background: var(--paper);
+  color: var(--ink);
+  font-family: var(--font-body), system-ui, sans-serif;
   font-size: 17px;
-  line-height: 1.5;
-  color: var(--text);
-  background: var(--bg);
+  line-height: 1.45;
+  font-variant-numeric: tabular-nums;
+  -webkit-font-smoothing: antialiased;
 }
 
 .page {
   margin: 0 auto;
-  padding: 28px 18px 48px;
-  max-width: 1000px;
+  padding: 32px 20px 64px;
+  max-width: 960px;
 }
 
-h1 {
-  margin: 0 0 4px;
-  font-size: clamp(2rem, 5vw, 2.75rem);
-  letter-spacing: -0.01em;
+:focus-visible {
+  outline: 2px solid var(--focus);
+  outline-offset: 2px;
 }
 
-.description {
-  margin: 0;
+.visually-hidden {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+
+.muted {
   color: var(--muted);
 }
 
-/* Tabs */
-.tabs {
-  display: flex;
-  gap: 8px;
-  margin: 20px 0 16px;
-  border-bottom: 1px solid var(--border);
-  overflow-x: auto;
+/* ------------------------------------------------------------------ masthead */
+.masthead {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  align-items: end;
+  column-gap: 24px;
 }
 
-.tab-button {
-  flex: none;
-  padding: 9px 14px;
-  border: 1px solid var(--border);
-  border-bottom: none;
-  border-radius: 8px 8px 0 0;
-  background: var(--tab-idle);
-  color: var(--text);
-  font: inherit;
+h1 {
+  grid-row: span 2;
+  margin: 0;
+  font-family: var(--font-display), sans-serif;
+  font-size: clamp(2.75rem, 8vw, 4.5rem);
+  font-weight: 700;
+  line-height: 0.9;
+  letter-spacing: -0.01em;
+}
+
+.season,
+.sync {
+  margin: 0;
+  text-align: right;
+}
+
+.season {
+  font-family: var(--font-display), sans-serif;
+  font-size: 1.35rem;
+  font-weight: 600;
+}
+
+.sync {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 4px 14px;
+  color: var(--muted);
+  font-size: 0.9rem;
+}
+
+.live-now {
+  color: var(--live);
+  font-weight: 600;
+}
+
+.live-now::before,
+.game-group.is-live h2::before {
+  content: "";
+  display: inline-block;
+  width: 0.5em;
+  height: 0.5em;
+  margin-right: 0.4em;
+  border-radius: 50%;
+  background: var(--live);
+  vertical-align: 0.1em;
+}
+
+/* ---------------------------------------------------------------------- tabs */
+.tabs {
+  display: flex;
+  gap: 28px;
+  margin: 28px 0 8px;
+  border-bottom: 1px solid var(--rule);
+}
+
+.tab {
+  margin-bottom: -1px;
+  padding: 6px 0 8px;
+  border: 0;
+  border-bottom: 4px solid transparent;
+  background: none;
+  color: var(--muted);
+  font-family: var(--font-display), sans-serif;
+  font-size: 1.3rem;
   font-weight: 600;
   cursor: pointer;
 }
 
-.tab-button.active {
-  background: var(--surface);
-  border-color: var(--border-strong);
-  box-shadow: 0 -1px 4px rgba(0, 0, 0, 0.06);
+.tab:hover {
+  color: var(--ink);
 }
 
-.tab-button:focus-visible,
-.manager-summary:focus-visible,
-.search-input:focus-visible {
-  outline: 2px solid #3b82f6;
-  outline-offset: 2px;
+.tab[aria-selected="true"] {
+  border-bottom-color: var(--ink);
+  color: var(--ink);
 }
 
-/* Manager dropdowns */
-.manager-list {
-  display: flex;
-  flex-direction: column;
-  gap: 10px;
+.panel {
+  padding-top: 8px;
 }
 
-.manager-dropdown {
-  background: var(--surface);
-  border: 1px solid var(--border);
-  border-radius: 8px;
-  box-shadow: var(--shadow);
+/* ----------------------------------------------------------------- standings */
+.standings-head,
+.standings summary {
+  display: grid;
+  grid-template-columns: 3rem 1fr 6rem 5.5rem 1rem;
+  align-items: center;
+  gap: 16px;
 }
 
-.manager-summary {
-  display: flex;
-  align-items: baseline;
-  gap: 12px;
-  padding: 12px 16px;
+.standings-head {
+  padding: 10px 0 8px;
+  border-bottom: 2px solid var(--ink);
+  color: var(--muted);
+  font-size: 0.85rem;
+  font-weight: 600;
+}
+
+.standings-head .col-manager {
+  grid-column: 2;
+}
+
+.col-num {
+  text-align: right;
+  white-space: nowrap;
+}
+
+.standings {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.standing {
+  border-bottom: 1px solid var(--rule);
+}
+
+.standings summary {
+  padding: 12px 0;
   cursor: pointer;
   list-style: none;
 }
 
-.manager-summary::-webkit-details-marker {
+.standings summary:hover .standing-name {
+  text-decoration: underline;
+  text-decoration-thickness: 1px;
+  text-underline-offset: 3px;
+}
+
+.standings summary::-webkit-details-marker {
   display: none;
 }
 
-.manager-summary::after {
-  content: '▸';
-  color: var(--muted);
+.standings summary::after {
+  content: "";
+  justify-self: end;
+  width: 0.5rem;
+  height: 0.5rem;
+  border-right: 2px solid var(--muted);
+  border-bottom: 2px solid var(--muted);
+  transform: translateY(-25%) rotate(45deg);
   transition: transform 0.15s ease;
 }
 
-.manager-dropdown[open] > .manager-summary::after {
-  transform: rotate(90deg);
+.standing details[open] summary::after {
+  transform: translateY(25%) rotate(225deg);
 }
 
-.manager-rank {
-  min-width: 2.2em;
+.standing-rank {
+  font-family: var(--font-display), sans-serif;
+  font-size: 2.4rem;
+  font-weight: 700;
+  line-height: 1;
+}
+
+.standing-name {
+  font-weight: 600;
+  line-height: 1.25;
+}
+
+.standing-meta {
+  display: block;
   color: var(--muted);
-  font-variant-numeric: tabular-nums;
+  font-size: 0.85rem;
+  font-weight: 400;
 }
 
-.manager-name {
-  flex: 1;
+.standing-points {
+  font-family: var(--font-display), sans-serif;
+  font-size: 1.75rem;
+  font-weight: 700;
+  line-height: 1;
+}
+
+.standing-today {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  line-height: 1.2;
+}
+
+.standing-today .points-gain,
+.standing-today .points-loss {
+  font-family: var(--font-display), sans-serif;
+  font-size: 1.2rem;
+  font-weight: 700;
+}
+
+/* Gold means points still on the table, same as the "with a win" chips. */
+.at-stake {
+  color: var(--gold-ink);
+  font-size: 0.85rem;
   font-weight: 600;
 }
 
-.manager-points {
-  white-space: nowrap;
-  font-variant-numeric: tabular-nums;
+/* Tonight strip: filled squares are results, the red ring is live, outlines are still to play. */
+.tonight {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 2px 8px;
+  margin-top: 3px;
 }
 
-.manager-dropdown .table-wrapper {
-  border-top: 1px solid var(--border);
+.tonight-marks {
+  display: inline-flex;
+  gap: 3px;
+}
+
+.mark {
+  width: 10px;
+  height: 10px;
+  border-radius: 2px;
+}
+
+.mark-won {
+  background: var(--gain);
+}
+
+.mark-lost {
+  background: var(--loss);
+}
+
+.mark-live {
+  border: 2px solid var(--live);
+  border-radius: 50%;
+  animation: live-pulse 1.6s ease-in-out infinite;
+}
+
+.mark-upcoming {
+  border: 1.5px solid var(--muted);
+}
+
+@keyframes live-pulse {
+  50% {
+    opacity: 0.35;
+  }
+}
+
+.standing details > .table-wrapper,
+.standing details > .empty-state {
+  margin: 0 0 16px calc(3rem + 16px);
 }
 
 .rank-up,
 .rank-down {
-  margin-left: 6px;
-  font-size: 0.8em;
-  font-weight: 600;
+  margin-left: 4px;
+  font-size: 0.75rem;
+  font-weight: 700;
+  white-space: nowrap;
 }
 
 .rank-up {
@@ -167,102 +342,10 @@ h1 {
   color: var(--loss);
 }
 
-/* Tables */
-.table-wrapper {
-  overflow-x: auto;
-}
-
-.search-input + .table-wrapper,
-.scores-table {
-  background: var(--surface);
-}
-
-.search-input + .table-wrapper,
-.page > section > .table-wrapper {
-  border: 1px solid var(--border);
-  border-radius: 8px;
-  box-shadow: var(--shadow);
-}
-
-table {
-  width: 100%;
-  border-collapse: collapse;
-}
-
-th,
-td {
-  padding: 10px 16px;
-  text-align: left;
-  vertical-align: top;
-}
-
-th {
-  color: var(--muted);
-  font-size: 0.8em;
-  font-weight: 600;
-  text-transform: uppercase;
-  letter-spacing: 0.04em;
-}
-
-tbody tr + tr td {
-  border-top: 1px solid var(--border);
-}
-
-.num {
-  text-align: right;
-  white-space: nowrap;
-  font-variant-numeric: tabular-nums;
-}
-
-.center {
-  text-align: center;
-}
-
-.right {
-  text-align: right;
-}
-
-.scores-table {
-  table-layout: fixed;
-}
-
-.matchup,
-.team-manager,
-.status {
-  display: block;
-  color: var(--muted);
-  font-size: 0.88em;
-}
-
-.muted {
-  color: var(--muted);
-}
-
-.odds {
-  color: var(--muted);
-  font-size: 0.85em;
-  font-variant-numeric: tabular-nums;
-  white-space: nowrap;
-}
-
-.odds-block {
-  display: block;
-}
-
-.potential {
-  display: inline-block;
-  padding: 0 6px;
-  border: 1px solid var(--border-strong);
-  border-radius: 999px;
-  color: var(--muted);
-  font-size: 0.8em;
-  white-space: nowrap;
-}
-
 .points-gain,
 .points-loss {
+  font-size: 0.85rem;
   font-weight: 600;
-  font-size: 0.9em;
 }
 
 .points-gain {
@@ -273,59 +356,301 @@ tbody tr + tr td {
   color: var(--loss);
 }
 
-.live-indicator {
+/* -------------------------------------------------------------------- tables */
+.table-wrapper {
+  overflow-x: auto;
+}
+
+table {
+  width: 100%;
+  border-collapse: collapse;
+}
+
+th,
+td {
+  padding: 9px 12px;
+  text-align: left;
+  vertical-align: top;
+}
+
+th:first-child,
+td:first-child {
+  padding-left: 0;
+}
+
+th:last-child,
+td:last-child {
+  padding-right: 0;
+}
+
+th {
+  border-bottom: 2px solid var(--ink);
+  color: var(--muted);
+  font-size: 0.85rem;
+  font-weight: 600;
+}
+
+tbody tr + tr td {
+  border-top: 1px solid var(--rule);
+}
+
+.num {
+  text-align: right;
+  white-space: nowrap;
+}
+
+td.num strong {
+  display: block;
+  font-family: var(--font-display), sans-serif;
+  font-size: 1.25rem;
+  font-weight: 700;
+  line-height: 1.1;
+}
+
+.team-name {
+  font-weight: 600;
+}
+
+.matchup {
+  display: block;
+  color: var(--muted);
+  font-size: 0.88rem;
+}
+
+.manager-cell {
+  white-space: nowrap;
+}
+
+.today {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 2px 10px;
+}
+
+.score {
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.score.is-live {
+  color: var(--live);
+}
+
+.odds {
+  color: var(--muted);
+  font-size: 0.88rem;
+  white-space: nowrap;
+}
+
+.potential {
+  padding: 0 7px;
+  border: 1px solid var(--gold);
+  border-radius: 3px;
+  color: var(--gold-ink);
+  font-size: 0.8rem;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+/* -------------------------------------------------------------------- search */
+.search input {
+  width: 100%;
+  margin: 8px 0 12px;
+  padding: 10px 14px;
+  border: 1px solid var(--rule);
+  border-radius: 4px;
+  background: var(--surface);
+  color: var(--ink);
+  font: inherit;
+}
+
+.search input:focus-visible {
+  border-color: var(--focus);
+}
+
+/* --------------------------------------------------------------------- games */
+.game-group h2 {
+  margin: 20px 0 10px;
+  font-family: var(--font-display), sans-serif;
+  font-size: 1.35rem;
+  font-weight: 600;
+}
+
+.game-group.is-live h2 {
+  color: var(--live);
+}
+
+.games {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+  gap: 12px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.game {
+  border: 1px solid var(--rule);
+  border-left: 4px solid var(--rule);
+  border-radius: 4px;
+  background: var(--surface);
+}
+
+.game.is-live {
+  border-left-color: var(--live);
+}
+
+.side {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 8px 12px 6px;
+}
+
+.side + .side {
+  padding-top: 0;
+}
+
+.side-team {
+  min-width: 0;
+}
+
+.side-name {
+  font-weight: 600;
+}
+
+.side-manager {
+  margin-left: 8px;
+  color: var(--muted);
+  font-size: 0.85rem;
+}
+
+.side-score {
+  font-family: var(--font-display), sans-serif;
+  font-size: 1.6rem;
+  font-weight: 700;
+  line-height: 1;
+}
+
+.side-line {
+  color: var(--muted);
+  font-size: 0.88rem;
+  white-space: nowrap;
+}
+
+.side.lost .side-name,
+.side.lost .side-score {
+  color: var(--muted);
+  font-weight: 500;
+}
+
+.game-status {
+  margin: 4px 0 0;
+  padding: 6px 12px;
+  border-top: 1px solid var(--rule);
+  color: var(--muted);
+  font-size: 0.85rem;
+}
+
+.game.is-live .game-status {
   color: var(--live);
   font-weight: 600;
 }
 
-/* Search */
-.search-input {
-  width: 100%;
-  margin-bottom: 12px;
-  padding: 10px 14px;
-  border: 1px solid var(--border-strong);
-  border-radius: 8px;
-  background: var(--surface);
-  color: var(--text);
-  font: inherit;
-}
-
+/* ------------------------------------------------------------ states, errors */
 .empty-state {
   color: var(--muted);
 }
 
 .error {
   padding: 12px 16px;
-  border: 1px solid var(--loss);
-  border-radius: 8px;
+  border-left: 4px solid var(--loss);
+  background: var(--surface);
   color: var(--loss);
 }
 
+/* -------------------------------------------------------------------- mobile */
 @media (max-width: 640px) {
   body {
     font-size: 16px;
   }
 
   .page {
-    padding: 20px 12px 40px;
+    padding: 20px 14px 48px;
+  }
+
+  .masthead {
+    grid-template-columns: 1fr;
+  }
+
+  h1 {
+    grid-row: auto;
+    margin-bottom: 6px;
+  }
+
+  .season,
+  .sync {
+    justify-content: flex-start;
+    text-align: left;
+  }
+
+  .tabs {
+    gap: 22px;
+    margin-top: 20px;
+  }
+
+  .standings-head,
+  .standings summary {
+    grid-template-columns: 2rem 1fr 4.5rem 3.5rem 0.6rem;
+    gap: 8px;
+  }
+
+  .standing-rank {
+    font-size: 1.9rem;
+  }
+
+  .standing-points {
+    font-size: 1.45rem;
+  }
+
+  .standing-today .points-gain,
+  .standing-today .points-loss {
+    font-size: 1.05rem;
+  }
+
+  .at-stake {
+    font-size: 0.78rem;
+  }
+
+  /* Marks carry it visually on phones; screen readers still get the words. */
+  .tonight-summary {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip-path: inset(50%);
+    white-space: nowrap;
+  }
+
+  .standing details > .table-wrapper,
+  .standing details > .empty-state {
+    margin-left: 0;
   }
 
   th,
   td {
-    padding: 8px 10px;
+    padding: 8px 8px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .standings summary::after {
+    transition: none;
   }
 
-  .manager-summary {
-    padding: 12px;
-    gap: 8px;
-  }
-
-  .tabs {
-    gap: 4px;
-  }
-
-  .tab-button {
-    padding: 8px 10px;
-    font-size: 0.9em;
+  .mark-live {
+    animation: none;
   }
 }

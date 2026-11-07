@@ -38,7 +38,7 @@ export function isPre(game: StatusFields): boolean {
   return !game.game_state || game.game_state === 'pre';
 }
 
-/** "7:00 PM CT", "2nd 4:12", "Final", "Final - OT" */
+/** "7:00 PM CT", "2nd half 4:12", "Halftime", "OT 1:05", "Final", "Final - OT" */
 export function gameStatus(game: StatusFields): string {
   if (isPre(game)) return formatTime(game.start_time) || 'Scheduled';
   const period = (game.current_period ?? '').trim();
@@ -46,7 +46,8 @@ export function gameStatus(game: StatusFields): string {
     return period ? period.charAt(0) + period.slice(1).toLowerCase() : 'Final';
   }
   const clock = (game.contest_clock ?? '').trim().replace(/^0(\d:)/, '$1'); // "05:13" -> "5:13"
-  return [period, clock].filter(Boolean).join(' ') || 'Live';
+  if (/^half/i.test(period)) return 'Halftime';
+  return [periodLabel(period), clock].filter(Boolean).join(' ') || 'Live';
 }
 
 const toNumber = (n: number | string | null | undefined) =>
@@ -71,4 +72,10 @@ export function formatLine(spread: number | string | null | undefined, moneyline
   const s = formatSpread(spread);
   const ml = formatMoneyline(moneyline);
   return s && ml ? `${s} (${ml})` : s || ml;
+}
+
+/** The API's "1ST" / "2ND" / "OT" / "2OT" as "1st half" / "2nd half" / "OT" / "2OT". */
+function periodLabel(period: string): string {
+  if (/^[12](st|nd)$/i.test(period)) return `${period.toLowerCase()} half`;
+  return period.toUpperCase().includes('OT') ? period.toUpperCase() : period;
 }
