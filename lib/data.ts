@@ -81,6 +81,22 @@ function pickSeason(seasons: Season[], today: string): Season | undefined {
   return sorted.find((s) => s.start_date <= today && today <= s.end_date) ?? sorted.find((s) => s.start_date <= today);
 }
 
+/**
+ * The site is public, so managers appear by first name only ("Camden"). Where two share a
+ * first name, the last initial tells them apart ("Chris B.", "Chris M."). Done here, on the
+ * server, so full names never reach the browser; the database keeps them for the importer.
+ */
+function displayNames(fullNames: string[]): (name: string) => string {
+  const first = (name: string) => name.trim().split(/\s+/)[0];
+  const counts = new Map<string, number>();
+  for (const name of new Set(fullNames)) counts.set(first(name), (counts.get(first(name)) ?? 0) + 1);
+  return (name) => {
+    const parts = name.trim().split(/\s+/);
+    if (parts.length < 2 || (counts.get(parts[0]) ?? 0) < 2) return parts[0];
+    return `${parts[0]} ${parts[parts.length - 1][0]}.`;
+  };
+}
+
 function client() {
   const url = process.env.SUPABASE_URL;
   const key = process.env.SUPABASE_ANON_KEY;
@@ -106,10 +122,12 @@ export async function getLeagueData(): Promise<LeagueData | null> {
   }
 
   const gameRows = (games.data ?? []) as GameRow[];
+  const managerRows = (managers.data ?? []) as ManagerRow[];
+  const shortName = displayNames(managerRows.map((m) => m.manager_name));
   return {
     seasonLabel: season.label,
-    managers: (managers.data ?? []) as ManagerRow[],
-    teams: (teams.data ?? []) as TeamRow[],
+    managers: managerRows.map((m) => ({ ...m, manager_name: shortName(m.manager_name) })),
+    teams: ((teams.data ?? []) as TeamRow[]).map((t) => ({ ...t, manager_name: shortName(t.manager_name) })),
     games: gameRows,
     lastSynced: gameRows.reduce<string | null>((max, g) => (!max || g.updated_at > max ? g.updated_at : max), null),
   };
