@@ -308,17 +308,10 @@ h1 {
 .mark-live {
   border: 2px solid var(--live);
   border-radius: 50%;
-  animation: live-pulse 1.6s ease-in-out infinite;
 }
 
 .mark-upcoming {
   border: 1.5px solid var(--muted);
-}
-
-@keyframes live-pulse {
-  50% {
-    opacity: 0.35;
-  }
 }
 
 .standing details > .table-wrapper,
@@ -648,9 +641,5 @@ td.num strong {
 @media (prefers-reduced-motion: reduce) {
   .standings summary::after {
     transition: none;
-  }
-
-  .mark-live {
-    animation: none;
   }
 }
